@@ -9,7 +9,7 @@ import (
 
 var rootCmd = &cobra.Command{
 	Use:   "helpme",
-	Short: "Aporia — a Socratic dialogue companion for your ideas.",
+	Short: "Audit — a Socratic tool to audit ideas and activate critical thinking.",
 	Long: `Aporia uses a local LLM to challenge your assumptions and
 guide your thinking through Socratic dialogue. All conversations are
 stored in a local PostgreSQL database.

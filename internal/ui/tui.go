@@ -11,9 +11,9 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/matt/helpmetalktome/internal/config"
-	"github.com/matt/helpmetalktome/internal/db"
-	"github.com/matt/helpmetalktome/internal/llm"
+	"github.com/matt/audit/internal/config"
+	"github.com/matt/audit/internal/db"
+	"github.com/matt/audit/internal/llm"
 )
 
 var logoStyles = `{
@@ -128,12 +128,12 @@ var validCommands = map[string]bool{
 }
 
 var logoSplash = []string{
-	" ◉◉◉◉◉╮ ◉◉◉◉◉◉╮  ◉◉◉◉◉◉╮ ◉◉◉◉◉◉╮ ◉◉╮ ◉◉◉◉◉╮",
-	"◉◉╭──◉◉╮◉◉╭──◉◉╮◉◉╭───◉◉╮◉◉╭──◉◉╮◉◉│◉◉╭──◉◉╮",
-	"◉◉◉◉◉◉◉│◉◉◉◉◉◉╭╯◉◉│   ◉◉│◉◉◉◉◉◉╭╯◉◉│◉◉◉◉◉◉◉│",
-	"◉◉╭──◉◉│◉◉╭───╯ ◉◉│   ◉◉│◉◉╭──◉◉╮◉◉│◉◉╭──◉◉│",
-	"◉◉│  ◉◉│◉◉│     ╰◉◉◉◉◉◉╭╯◉◉│  ◉◉│◉◉│◉◉│  ◉◉│",
-	"╰─╯  ╰─╯╰─╯      ╰─────╯ ╰─╯  ╰─╯╰─╯╰─╯  ╰─╯",
+	" ◉◉◉◉◉╮ ◉◉╮   ◉◉╮◉◉◉◉◉◉╮ ◉◉╮◉◉◉◉◉◉◉◉╮",
+	"◉◉╭──◉◉╮◉◉│   ◉◉│◉◉╭──◉◉╮◉◉│╰──◉◉╭──╯",
+	"◉◉◉◉◉◉◉│◉◉│   ◉◉│◉◉│  ◉◉│◉◉│   ◉◉│   ",
+	"◉◉╭──◉◉│◉◉│   ◉◉│◉◉│  ◉◉│◉◉│   ◉◉│   ",
+	"◉◉│  ◉◉│╰◉◉◉◉◉◉╭╯◉◉◉◉◉◉╭╯◉◉│   ◉◉│   ",
+	"╰─╯  ╰─╯ ╰─────╯ ╰─────╯ ╰─╯   ╰─╯   ",
 }
 
 type llmResponseMsg struct {
@@ -222,7 +222,7 @@ func NewTUI(brain *llm.SocraticBrain, store *db.SessionStore, extractor *llm.Ass
 		logoBuf.WriteString(styleLogoLine(line))
 		logoBuf.WriteRune('\n')
 	}
-	logoBuf.WriteString(logoSubStyle.Render("      socratic dialogue companion"))
+	logoBuf.WriteString(logoSubStyle.Render("      audit your ideas — critically"))
 	logoBuf.WriteString("\n\n")
 	t.logoPrefix = logoBuf.String()
 

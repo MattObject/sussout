@@ -1,4 +1,4 @@
-module github.com/matt/helpmetalktome
+module github.com/matt/audit
 
 go 1.26.5
 

@@ -10,10 +10,10 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/matt/helpmetalktome/internal/config"
-	"github.com/matt/helpmetalktome/internal/db"
-	"github.com/matt/helpmetalktome/internal/llm"
-	"github.com/matt/helpmetalktome/internal/ui"
+	"github.com/matt/audit/internal/config"
+	"github.com/matt/audit/internal/db"
+	"github.com/matt/audit/internal/llm"
+	"github.com/matt/audit/internal/ui"
 	"github.com/spf13/cobra"
 )
 

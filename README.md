@@ -1,6 +1,6 @@
-# HelpMeTalkToMe
+# Audit
 
-A Socratic dialogue TUI companion for stress-testing creative and technical ideas. Acts as an insightful collaborator that challenges your thinking through progressive questioning.
+A Socratic tool to audit ideas. Activates critical thinking while developing an idea, acting as an insightful collaborator that challenges your thinking through progressive questioning.
 
 ## Prerequisites
 
@@ -12,17 +12,17 @@ A Socratic dialogue TUI companion for stress-testing creative and technical idea
 
 ```bash
 # Set up the database
-export DATABASE_URL="postgres://user:pass@localhost:5432/helpme"
+export DATABASE_URL="postgres://user:pass@localhost:5432/audit"
 psql $DATABASE_URL -f db/schema.sql
 
 # Build
-go build -o helpme .
+go build -o audit .
 
 # Configure a preset
-./helpme config add
+./audit config add
 
 # Start
-./helpme start
+./audit start
 ```
 
 ## Commands
@@ -38,13 +38,13 @@ go build -o helpme .
 
 ## Config
 
-Presets are stored in `~/.helpmetalktome.yaml`. The `config` subcommand manages them:
+Presets are stored in `~/.audit.yaml`. The `config` subcommand manages them:
 
 ```bash
-./helpme config list     # Show all presets
-./helpme config add      # Add a new preset
-./helpme config use      # Switch default preset
-./helpme config remove   # Remove a preset
+./audit config list     # Show all presets
+./audit config add      # Add a new preset
+./audit config use      # Switch default preset
+./audit config remove   # Remove a preset
 ```
 
 Environment variables (`LLM_STUDIO_URL`, `LLM_MODEL`, `LLM_API_KEY`) override preset values.

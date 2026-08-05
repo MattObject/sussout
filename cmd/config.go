@@ -6,7 +6,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/matt/helpmetalktome/internal/config"
+	"github.com/matt/audit/internal/config"
 	"github.com/spf13/cobra"
 )
 
