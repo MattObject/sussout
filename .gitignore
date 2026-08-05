@@ -1,0 +1,7 @@
+helpme
+helpmetalktome
+.env
+*.backup
+.DS_Store
+/var/
+/tmp/
