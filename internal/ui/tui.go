@@ -222,7 +222,7 @@ func NewTUI(brain *llm.SocraticBrain, store *db.SessionStore, extractor *llm.Ass
 		logoBuf.WriteString(styleLogoLine(line))
 		logoBuf.WriteRune('\n')
 	}
-	logoBuf.WriteString(logoSubStyle.Render("      audit your ideas — critically"))
+	logoBuf.WriteString(logoSubStyle.Render("      Socratic auditing of ideas."))
 	logoBuf.WriteString("\n\n")
 	t.logoPrefix = logoBuf.String()
 
