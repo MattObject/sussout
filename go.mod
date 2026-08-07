@@ -1,4 +1,4 @@
-module github.com/matt/audit
+module github.com/matt/sussout
 
 go 1.26.5
 

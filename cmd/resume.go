@@ -10,17 +10,17 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/matt/audit/internal/config"
-	"github.com/matt/audit/internal/db"
-	"github.com/matt/audit/internal/llm"
-	"github.com/matt/audit/internal/ui"
+	"github.com/matt/sussout/internal/config"
+	"github.com/matt/sussout/internal/db"
+	"github.com/matt/sussout/internal/llm"
+	"github.com/matt/sussout/internal/ui"
 	"github.com/spf13/cobra"
 )
 
 var resumePreset string
 
 func init() {
-	resumeCmd.Flags().StringVar(&resumePreset, "preset", "", "LLM preset to use (see 'helpme config list')")
+	resumeCmd.Flags().StringVar(&resumePreset, "preset", "", "LLM preset to use (see 'sussout config list')")
 	rootCmd.AddCommand(resumeCmd)
 }
 

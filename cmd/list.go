@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/matt/audit/internal/config"
-	"github.com/matt/audit/internal/db"
+	"github.com/matt/sussout/internal/config"
+	"github.com/matt/sussout/internal/db"
 	"github.com/spf13/cobra"
 )
 

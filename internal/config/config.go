@@ -5,7 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/matt/audit/internal/llm"
+	"github.com/matt/sussout/internal/llm"
 	"gopkg.in/yaml.v3"
 )
 
@@ -33,9 +33,9 @@ var defaultPresets = map[string]Preset{
 func configPath() string {
 	home, err := os.UserHomeDir()
 	if err != nil {
-		return ".audit.yaml"
+		return ".sussout.yaml"
 	}
-	return filepath.Join(home, ".helpmetalktome.yaml")
+	return filepath.Join(home, ".sussout.yaml")
 }
 
 func LoadFile() (*File, error) {

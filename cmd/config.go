@@ -6,7 +6,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/matt/audit/internal/config"
+	"github.com/matt/sussout/internal/config"
 	"github.com/spf13/cobra"
 )
 
@@ -76,7 +76,7 @@ var configUseCmd = &cobra.Command{
 			return err
 		}
 		if _, ok := f.Presets[name]; !ok {
-			return fmt.Errorf("preset '%s' not found. Use 'helpme config list' to see available presets", name)
+			return fmt.Errorf("preset '%s' not found. Use 'sussout config list' to see available presets", name)
 		}
 		f.DefaultPreset = name
 		if err := config.SaveFile(f); err != nil {
@@ -147,7 +147,7 @@ var configRemoveCmd = &cobra.Command{
 			return fmt.Errorf("preset '%s' not found", name)
 		}
 		if name == f.DefaultPreset {
-			return fmt.Errorf("cannot remove the default preset. Use 'helpme config use' first")
+			return fmt.Errorf("cannot remove the default preset. Use 'sussout config use' first")
 		}
 
 		fmt.Printf("Remove preset '%s'? [y/N]: ", name)

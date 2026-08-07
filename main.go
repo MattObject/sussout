@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 
 	"github.com/joho/godotenv"
-	"github.com/matt/audit/cmd"
+	"github.com/matt/sussout/cmd"
 )
 
 func main() {

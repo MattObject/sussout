@@ -11,9 +11,9 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/matt/audit/internal/config"
-	"github.com/matt/audit/internal/db"
-	"github.com/matt/audit/internal/llm"
+	"github.com/matt/sussout/internal/config"
+	"github.com/matt/sussout/internal/db"
+	"github.com/matt/sussout/internal/llm"
 )
 
 var logoStyles = `{
@@ -120,6 +120,13 @@ var (
 
 	helpDesc = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("#E0E0E0"))
+
+	humanStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#FFFFFF")).
+			Italic(true)
+
+	blockSeparator = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#444444"))
 )
 
 var validCommands = map[string]bool{
@@ -128,12 +135,12 @@ var validCommands = map[string]bool{
 }
 
 var logoSplash = []string{
-	" ◉◉◉◉◉╮ ◉◉╮   ◉◉╮◉◉◉◉◉◉╮ ◉◉╮◉◉◉◉◉◉◉◉╮",
-	"◉◉╭──◉◉╮◉◉│   ◉◉│◉◉╭──◉◉╮◉◉│╰──◉◉╭──╯",
-	"◉◉◉◉◉◉◉│◉◉│   ◉◉│◉◉│  ◉◉│◉◉│   ◉◉│   ",
-	"◉◉╭──◉◉│◉◉│   ◉◉│◉◉│  ◉◉│◉◉│   ◉◉│   ",
-	"◉◉│  ◉◉│╰◉◉◉◉◉◉╭╯◉◉◉◉◉◉╭╯◉◉│   ◉◉│   ",
-	"╰─╯  ╰─╯ ╰─────╯ ╰─────╯ ╰─╯   ╰─╯   ",
+	"◉◉◉◉◉◉◉╗◉◉╗   ◉◉╗◉◉◉◉◉◉◉╗◉◉◉◉◉◉◉╗ ◉◉◉◉◉◉╗ ◉◉╗   ◉◉╗◉◉◉◉◉◉◉◉╗",
+	"◉◉╔════╝◉◉║   ◉◉║◉◉╔════╝◉◉╔════╝◉◉╔═══◉◉╗◉◉║   ◉◉║╚══◉◉╔══╝",
+	"◉◉◉◉◉◉◉╗◉◉║   ◉◉║◉◉◉◉◉◉◉╗◉◉◉◉◉◉◉╗◉◉║   ◉◉║◉◉║   ◉◉║   ◉◉║   ",
+	"╚════◉◉║◉◉║   ◉◉║╚════◉◉║╚════◉◉║◉◉║   ◉◉║◉◉║   ◉◉║   ◉◉║   ",
+	"◉◉◉◉◉◉◉║╚◉◉◉◉◉◉╔╝◉◉◉◉◉◉◉║◉◉◉◉◉◉◉║╚◉◉◉◉◉◉╔╝╚◉◉◉◉◉◉╔╝   ◉◉║   ",
+	"╚══════╝ ╚═════╝ ╚══════╝╚══════╝ ╚═════╝  ╚═════╝    ╚═╝   ",
 }
 
 type llmResponseMsg struct {
@@ -151,6 +158,11 @@ type serverResultMsg struct {
 type statusMsg struct {
 	text  string
 	isErr bool
+}
+
+type msgLine struct {
+	text   string
+	isHuman bool
 }
 
 type TUI struct {
@@ -178,13 +190,13 @@ type TUI struct {
 	statusSuccess string
 
 	logoPrefix    string
-	conversation  strings.Builder
+	rawLines    []msgLine
 }
 
 func NewTUI(brain *llm.SocraticBrain, store *db.SessionStore, extractor *llm.AssumptionExtractor) *TUI {
 	ta := textarea.New()
 	ta.Placeholder = ""
-	ta.Prompt = "? "
+	ta.Prompt = ""
 	ta.SetHeight(2)
 	ta.Focus()
 	ta.ShowLineNumbers = false
@@ -222,7 +234,7 @@ func NewTUI(brain *llm.SocraticBrain, store *db.SessionStore, extractor *llm.Ass
 		logoBuf.WriteString(styleLogoLine(line))
 		logoBuf.WriteRune('\n')
 	}
-	logoBuf.WriteString(logoSubStyle.Render("      Socratic auditing of ideas."))
+	logoBuf.WriteString(logoSubStyle.Render("      Socratic stress-testing of ideas."))
 	logoBuf.WriteString("\n\n")
 	t.logoPrefix = logoBuf.String()
 
@@ -388,6 +400,9 @@ case tea.KeyMsg:
 				}
 				filepath, instructions := parseWriteArgs(args)
 				t.textarea.Reset()
+				t.thinking = true
+				t.textarea.Blur()
+				t.statusSuccess = fmt.Sprintf("Generating document with %s...", t.brain.CurrentModel())
 				return t, t.writeDocument(filepath, instructions)
 			}
 
@@ -396,14 +411,14 @@ case tea.KeyMsg:
 				t.store.ClearAssumptions(context.Background(), t.sessionID)
 				t.brain.ResetHistory()
 				t.textarea.Reset()
-				t.conversation.Reset()
-				t.appendLine("")
-				t.appendLine("")
+				t.rawLines = nil
+				t.appendLine("", false)
+				t.appendLine("", false)
 				return t, nil
 			}
 
-			t.appendLine(fmt.Sprintf("\nYou: %s", input))
-			t.appendLine("")
+			t.appendLine(fmt.Sprintf("\nYou: %s", input), true)
+			t.appendLine("", false)
 
 			if err := t.store.SaveMessage(context.Background(), t.sessionID, "user", input); err != nil {
 				t.err = err
@@ -413,17 +428,18 @@ case tea.KeyMsg:
 			t.textarea.Reset()
 			t.thinking = true
 			t.textarea.Blur()
-			t.appendLine("(Sending to LLM...)")
+			t.statusSuccess = fmt.Sprintf("Sending to %s...", t.brain.CurrentModel())
 			t.viewport.GotoBottom()
 			cmds = append(cmds, t.callLLM(input))
 		}
 
 	case llmResponseMsg:
 		t.thinking = false
+		t.statusSuccess = ""
 		t.textarea.Focus()
 		if msg.err != nil {
-			t.appendLine(fmt.Sprintf("Error: %s", msg.err))
-			t.appendLine("")
+			t.appendLine(fmt.Sprintf("Error: %s", msg.err), false)
+			t.appendLine("", false)
 			return t, nil
 		}
 
@@ -439,8 +455,8 @@ case tea.KeyMsg:
 			}
 		}
 
-		t.appendLine(cleaned)
-		t.appendLine("")
+		t.appendLine(cleaned, false)
+		t.appendLine("", false)
 
 		t.viewport.GotoBottom()
 
@@ -481,6 +497,8 @@ case tea.KeyMsg:
 		t.statusSuccess = "Connected — select a model"
 
 	case statusMsg:
+		t.thinking = false
+		t.textarea.Focus()
 		if msg.isErr {
 			t.statusError = msg.text
 		} else {
@@ -506,7 +524,11 @@ func (t *TUI) View() string {
 
 	var status string
 	if t.thinking {
-		status = statusStyle.Render(thinkingDot + "  Thinking...")
+		thinkText := t.statusSuccess
+		if thinkText == "" {
+			thinkText = "Thinking..."
+		}
+		status = statusStyle.Render(thinkingDot + "  " + thinkText)
 	} else {
 		agentStatus := statusStyle.Render("Ready")
 		var userPrompt string
@@ -553,18 +575,50 @@ func (t *TUI) saveConfig() {
 	_ = config.SaveCurrentPreset(url, model, key)
 }
 
-func (t *TUI) appendLine(line string) {
-	t.conversation.WriteString(line + "\n")
+func (t *TUI) appendLine(line string, isHuman bool) {
+	t.rawLines = append(t.rawLines, msgLine{text: line, isHuman: isHuman})
 	t.rerenderContent()
 }
 
 func (t *TUI) rerenderContent() {
-	rendered, err := t.renderer.Render(t.conversation.String())
-	if err != nil {
-		t.viewport.SetContent(t.logoPrefix + t.conversation.String())
-	} else {
-		t.viewport.SetContent(t.logoPrefix + rendered)
+	var result strings.Builder
+	vw := t.viewport.Width - 2
+
+	var aiBlock []string
+	flushAI := func() {
+		if len(aiBlock) == 0 {
+			return
+		}
+		blockText := strings.Join(aiBlock, "\n")
+		rendered, err := t.renderer.Render(blockText)
+		if err != nil {
+			result.WriteString(blockText)
+		} else {
+			result.WriteString(rendered)
+		}
+		result.WriteString("\n")
+		aiBlock = aiBlock[:0]
 	}
+
+	hasPrev := false
+	for _, l := range t.rawLines {
+		if l.isHuman {
+			flushAI()
+			if hasPrev {
+				result.WriteString(blockSeparator.Render(strings.Repeat("─", vw)))
+				result.WriteString("\n\n")
+			}
+			styled := humanStyle.Width(vw).Render(l.text)
+			result.WriteString(styled)
+			result.WriteString("\n\n")
+			hasPrev = true
+		} else {
+			aiBlock = append(aiBlock, l.text)
+		}
+	}
+	flushAI()
+
+	t.viewport.SetContent(t.logoPrefix + result.String())
 	t.viewport.GotoBottom()
 }
 
@@ -650,7 +704,7 @@ func styleLogoLine(line string) string {
 		switch c {
 		case '◉':
 			sb.WriteString(logoFillStyle.Render(string(c)))
-		case '╭', '╮', '╰', '╯', '│', '─':
+		case '╭', '╮', '╰', '╯', '│', '─', '╗', '╔', '╝', '║', '╚', '═':
 			sb.WriteString(logoOutlineStyle.Render(string(c)))
 		default:
 			sb.WriteRune(c)
@@ -758,10 +812,10 @@ func (t *TUI) Run(sessionID int, recapSummary string) error {
 	t.sessionID = sessionID
 
 	if recapSummary != "" {
-		t.appendLine("─ Resuming conversation ─")
-		t.appendLine("")
-		t.appendLine(recapSummary)
-		t.appendLine("")
+		t.appendLine("─ Resuming conversation ─", false)
+		t.appendLine("", false)
+		t.appendLine(recapSummary, false)
+		t.appendLine("", false)
 	}
 
 	_, err := tea.NewProgram(t, tea.WithAltScreen()).Run()

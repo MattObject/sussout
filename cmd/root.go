@@ -8,17 +8,17 @@ import (
 )
 
 var rootCmd = &cobra.Command{
-	Use:   "helpme",
-	Short: "Audit — a Socratic tool to audit ideas and activate critical thinking.",
-	Long: `Aporia uses a local LLM to challenge your assumptions and
+Use: "sussout",
+	Short: "Sussout — a Socratic tool to stress-test ideas.",
+	Long: `Sussout uses a local LLM to challenge your assumptions and
 guide your thinking through Socratic dialogue. All conversations are
 stored in a local PostgreSQL database.
 
 Examples:
-  helpme start
-  helpme start --title "Designing a new API"
-  helpme list
-  helpme resume 1`,
+  sussout start
+  sussout start --title "Designing a new API"
+  sussout list
+  sussout resume 1`,
 	Version: "2.0.0",
 }
 

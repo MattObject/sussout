@@ -11,18 +11,46 @@ import (
 	"syscall"
 
 	"github.com/charmbracelet/lipgloss"
-	"github.com/matt/audit/internal/config"
-	"github.com/matt/audit/internal/db"
-	"github.com/matt/audit/internal/llm"
-	"github.com/matt/audit/internal/ui"
+	"github.com/matt/sussout/internal/config"
+	"github.com/matt/sussout/internal/db"
+	"github.com/matt/sussout/internal/llm"
+	"github.com/matt/sussout/internal/ui"
 	"github.com/spf13/cobra"
 )
 
 var pickerBox = lipgloss.NewStyle().
 	Border(lipgloss.RoundedBorder()).
 	BorderForeground(lipgloss.Color("#5B9BD5")).
-	Padding(0, 1).
-	Width(60)
+	Padding(0, 1)
+
+var pickerLogoLines = []string{
+	"●●●●●●●╗●●╗   ●●╗●●●●●●●╗●●●●●●●╗ ●●●●●●╗ ●●╗   ●●╗●●●●●●●●╗",
+	"●●╔════╝●●║   ●●║●●╔════╝●●╔════╝●●╔═══●●╗●●║   ●●║╚══●●╔══╝",
+	"●●●●●●●╗●●║   ●●║●●●●●●●╗●●●●●●●╗●●║   ●●║●●║   ●●║   ●●║   ",
+	"╚════●●║●●║   ●●║╚════●●║╚════●●║●●║   ●●║●●║   ●●║   ●●║   ",
+	"●●●●●●●║╚●●●●●●╔╝●●●●●●●║●●●●●●●║╚●●●●●●╔╝╚●●●●●●╔╝   ●●║   ",
+	"╚══════╝ ╚═════╝ ╚══════╝╚══════╝ ╚═════╝  ╚═════╝    ╚═╝   ",
+}
+
+var pickerLogoFill = lipgloss.NewStyle().Foreground(lipgloss.Color("#E04040"))
+var pickerLogoOutline = lipgloss.NewStyle().Foreground(lipgloss.Color("#FFFFFF"))
+
+var pickerPrompt = lipgloss.NewStyle().
+	Foreground(lipgloss.Color("#FFFFFF"))
+
+var promptBorder = lipgloss.NewStyle().
+	Border(lipgloss.RoundedBorder()).
+	BorderForeground(lipgloss.Color("#FFFFFF")).
+	Padding(0, 1)
+
+var pickerStatusBar = lipgloss.NewStyle().
+	Border(lipgloss.RoundedBorder()).
+	BorderForeground(lipgloss.Color("#666666")).
+	Padding(0, 1)
+
+var pickerStatusText = lipgloss.NewStyle().
+	Foreground(lipgloss.Color("#888888")).
+	Italic(true)
 
 var pickerHeader = lipgloss.NewStyle().
 	Foreground(lipgloss.Color("#FFD700")).
@@ -44,7 +72,7 @@ var (
 func init() {
 	startCmd.Flags().StringVarP(&startTitle, "title", "t", "New Creative Project", "Session title")
 	startCmd.Flags().StringVarP(&startContext, "context", "c", "", "Initial context file to read")
-	startCmd.Flags().StringVar(&startPreset, "preset", "", "LLM preset to use (see 'helpme config list')")
+	startCmd.Flags().StringVar(&startPreset, "preset", "", "LLM preset to use (see 'sussout config list')")
 	startCmd.Flags().StringVar(&startModel, "model", "", "Override the LLM model (e.g. 'gpt-4o')")
 	startCmd.Flags().StringVar(&startAPIKey, "api-key", "", "Override the LLM API key")
 	rootCmd.AddCommand(startCmd)
@@ -147,9 +175,9 @@ var startCmd = &cobra.Command{
 			brain.LoadHistory(history)
 
 			var recapSummary string
-			fmt.Fprintf(os.Stderr, "Looking up conversation...")
+			renderStatusOverlay(fmt.Sprintf("Looking up conversation %d...", sessionID))
 			summary, recapErr := brain.Recap(ctx)
-			fmt.Fprintf(os.Stderr, "\r\033[K")
+			clearStatusOverlay()
 			if recapErr != nil {
 				recapSummary = fmt.Sprintf("(Unable to generate recap: %s)", recapErr)
 			} else if summary != "" {
@@ -176,6 +204,9 @@ var startCmd = &cobra.Command{
 func pickSession(ctx context.Context, store *db.SessionStore, reader *bufio.Reader) (int, error) {
 	all, err := store.ListSessions(ctx)
 	if err != nil || len(all) == 0 {
+		if err == nil {
+			showWelcome()
+		}
 		return 0, nil
 	}
 
@@ -190,6 +221,8 @@ func pickSession(ctx context.Context, store *db.SessionStore, reader *bufio.Read
 		batch := all[offset:end]
 
 		var sb strings.Builder
+		sb.WriteString(renderLogoForPicker())
+		sb.WriteString("\n\n")
 		sb.WriteString(pickerHeader + "\n\n")
 		for _, s := range batch {
 			sb.WriteString(fmt.Sprintf("[%d]  %s  (%s)\n",
@@ -202,9 +235,10 @@ func pickSession(ctx context.Context, store *db.SessionStore, reader *bufio.Read
 		}
 		sb.WriteString("\n" + pickerHint)
 
-		fmt.Fprintln(os.Stderr)
-		fmt.Fprintln(os.Stderr, pickerBox.Render(sb.String()))
-		fmt.Fprintf(os.Stderr, "\n> ")
+	fmt.Fprintln(os.Stderr)
+	bw := boxWidth
+	fmt.Fprintln(os.Stderr, pickerBox.Copy().Width(bw).Render(sb.String()))
+	printBorderedPrompt(bw)
 
 		input, err := reader.ReadString('\n')
 		if err != nil {
@@ -246,4 +280,51 @@ func loadContextFile() string {
 		return ""
 	}
 	return string(content)
+}
+
+func renderPickerLogo() string {
+	var sb strings.Builder
+	for _, line := range pickerLogoLines {
+		for _, c := range line {
+			switch c {
+			case '●':
+				sb.WriteString(pickerLogoFill.Render(string(c)))
+			case '╭', '╮', '╰', '╯', '│', '─', '╗', '╔', '╝', '║', '╚', '═':
+				sb.WriteString(pickerLogoOutline.Render(string(c)))
+			default:
+				sb.WriteRune(c)
+			}
+		}
+		sb.WriteRune('\n')
+	}
+	return sb.String()
+}
+
+func printBorderedPrompt(width int) {
+	fmt.Fprint(os.Stderr, "\n"+promptBorder.Copy().Width(width).Render(pickerPrompt.Render("> ")))
+	fmt.Fprint(os.Stderr, "\033[1A\033[6G")
+}
+
+func renderStatusOverlay(msg string) {
+	w := boxWidth
+	bar := pickerStatusBar.Copy().Width(w).Render("\n" + pickerStatusText.Render(msg) + "\n")
+	fmt.Fprint(os.Stderr, "\r\033[3A"+bar)
+	fmt.Fprint(os.Stderr, "\033[2A\033[3G")
+}
+
+func clearStatusOverlay() {
+	fmt.Fprint(os.Stderr, "\r\033[K\033[A\r\033[K\033[A\r\033[K\033[A\r\033[K\033[A\r\033[K")
+}
+
+const boxWidth = 64
+
+func showWelcome() {
+	bw := boxWidth
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, pickerBox.Copy().Width(bw).Render(renderLogoForPicker()+"\n\nStarting a new session..."))
+	fmt.Fprintln(os.Stderr)
+}
+
+func renderLogoForPicker() string {
+	return renderPickerLogo()
 }

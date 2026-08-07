@@ -1,10 +1,10 @@
-# Audit
+# Sussout
 
-A local-first CLI application for Socratic auditing of ideas. Connects to any OpenAI-compatible LLM server (LM Studio, Ollama, omlx, etc.) and engages you in progressive, structured questioning to stress-test your thinking — no SaaS, no accounts, your conversations stay on your machine.
+A local-first CLI application for Socratic stress-testing of ideas. Connects to any OpenAI-compatible LLM server (LM Studio, Ollama, omlx, etc.) and engages you in progressive, structured questioning to stress-test your thinking — no SaaS, no accounts, your conversations stay on your machine.
 
 ## How It Works
 
-Audit acts as a critical collaborator. You bring an idea — a project, a design choice, a research question — and it asks probing questions to expose hidden assumptions, structural gaps, and contradictions. The dialogue is stateful: Audit tracks your position across turns and flags when your thinking drifts or stalls.
+Sussout acts as a critical collaborator. You bring an idea — a project, a design choice, a research question — and it asks probing questions to expose hidden assumptions, structural gaps, and contradictions. The dialogue is stateful: Sussout tracks your position across turns and flags when your thinking drifts or stalls.
 
 Sessions are stored locally in PostgreSQL. You can resume past conversations, export them to Markdown, and switch models or servers mid-session. Everything runs on your hardware against your own LLM.
 
@@ -15,7 +15,7 @@ Sessions are stored locally in PostgreSQL. You can resume past conversations, ex
 - **Interactive TUI** — terminal-native interface with scrolling, color, and panels
 - **Session management** — resume past sessions with auto-generated recaps
 - **Model switching** — change servers and models mid-session from a picker panel
-- **Persistent config** — server and model choices saved to `~/.audit.yaml` across launches
+- **Persistent config** — server and model choices saved to `~/.sussout.yaml` across launches
 - **Export** — generate Markdown summaries with `/write`
 
 ## Prerequisites
@@ -27,23 +27,23 @@ Sessions are stored locally in PostgreSQL. You can resume past conversations, ex
 ## Install
 
 ```bash
-git clone https://github.com/MattObject/audit.git
-cd audit
-go build -o audit .
+git clone https://github.com/MattObject/sussout.git
+cd sussout
+go build -o sussout .
 ```
 
 ## Quick Start
 
 ```bash
 # Set up the database
-export DATABASE_URL="postgres://user:pass@localhost:5432/audit"
+export DATABASE_URL="postgres://user:pass@localhost:5432/sussout"
 psql $DATABASE_URL -f db/schema.sql
 
 # Add a preset for your LLM server
-./audit config add
+./sussout config add
 
 # Start a session
-./audit start
+./sussout start
 ```
 
 ## Commands
@@ -60,20 +60,20 @@ psql $DATABASE_URL -f db/schema.sql
 ## Session Management
 
 ```bash
-./audit start           # New session or pick from recent ones
-./audit resume <id>     # Resume a specific session by ID
-./audit list            # List all past sessions
+./sussout start           # New session or pick from recent ones
+./sussout resume <id>     # Resume a specific session by ID
+./sussout list            # List all past sessions
 ```
 
 ## Config
 
-Presets are stored in `~/.audit.yaml`. Each preset defines a server URL, an optional model, and an optional API key.
+Presets are stored in `~/.sussout.yaml`. Each preset defines a server URL, an optional model, and an optional API key.
 
 ```bash
-./audit config list     # Show all presets
-./audit config add      # Add a new preset
-./audit config use      # Switch default preset
-./audit config remove   # Remove a preset
+./sussout config list     # Show all presets
+./sussout config add      # Add a new preset
+./sussout config use      # Switch default preset
+./sussout config remove   # Remove a preset
 ```
 
 Environment variables (`LLM_STUDIO_URL`, `LLM_MODEL`, `LLM_API_KEY`) override preset values at runtime.
