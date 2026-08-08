@@ -260,9 +260,9 @@ func pickSession(ctx context.Context, store *db.SessionStore, model string) (int
 				prefix, s.ID, s.Title, s.UpdatedAt.Format("Jan 2 15:04"), star))
 		}
 		sb.WriteString("\n")
-		sb.WriteString("[n]  Start new conversation\n")
-		sb.WriteString("[e]  Edit conversations\n")
-		sb.WriteString("[q]  Quit\n")
+		sb.WriteString("  [n]  Start new conversation\n")
+		sb.WriteString("  [e]  Edit conversations\n")
+		sb.WriteString("  [q]  Quit\n")
 
 		if statusErr != "" {
 			sb.WriteString("\n" + pickerError.Render("  " + statusErr) + "\n")
@@ -412,9 +412,9 @@ func editSessions(ctx context.Context, store *db.SessionStore, model string) {
 			subSb.WriteString(pickerStatusText.Render("Using model: " + model))
 			subSb.WriteString("\n\n")
 			subSb.WriteString(pickerHeader + "\n\n")
-			subSb.WriteString(fmt.Sprintf("[%d]  %s  (%s)\n\n", session.ID, session.Title, session.UpdatedAt.Format("Jan 2 15:04")))
-			subSb.WriteString("[d]  Delete this conversation\n")
-			subSb.WriteString("[r]  Rename this conversation\n")
+			subSb.WriteString(fmt.Sprintf("  [%d]  %s  (%s)\n\n", session.ID, session.Title, session.UpdatedAt.Format("Jan 2 15:04")))
+			subSb.WriteString("  [d]  Delete this conversation\n")
+			subSb.WriteString("  [r]  Rename this conversation\n")
 			subSb.WriteString("\n" + pickerStatusText.Render("d or r to act, Esc to go back"))
 
 			fmt.Fprint(os.Stderr, "\033[2J\033[H")
@@ -435,7 +435,7 @@ func editSessions(ctx context.Context, store *db.SessionStore, model string) {
 				delSb.WriteString("\n\n")
 				delSb.WriteString(pickerHeader + "\n\n")
 				delSb.WriteString(fmt.Sprintf("Delete session %d: %s?\n\n", session.ID, session.Title))
-				delSb.WriteString(pickerError.Render("[y]  Yes, delete\n"))
+				delSb.WriteString(pickerError.Render("  [y]  Yes, delete\n"))
 				delSb.WriteString(pickerStatusText.Render("Enter to cancel"))
 
 				fmt.Fprint(os.Stderr, "\033[2J\033[H")
