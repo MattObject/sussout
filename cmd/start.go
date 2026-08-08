@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
-	"strconv"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/matt/sussout/internal/config"
@@ -369,76 +369,42 @@ func editSessions(ctx context.Context, store *db.SessionStore, model string) {
 		return
 	}
 
-	const pageSize = 10
-	offset := 0
+	cursor := 0
 
 	for {
-		end := offset + pageSize
-		if end > len(all) {
-			end = len(all)
-		}
-		page := all[offset:end]
-
 		var sb strings.Builder
 		sb.WriteString(renderLogoForPicker())
 		sb.WriteString("\n")
 		sb.WriteString(pickerStatusText.Render("Using model: " + model))
 		sb.WriteString("\n\n")
 		sb.WriteString(pickerHeader + " (editing)\n\n")
-		for _, s := range page {
-			sb.WriteString(fmt.Sprintf("[%d]  %s  (%s)\n",
-				s.ID, s.Title, s.UpdatedAt.Format("Jan 2 15:04")))
-		}
-
-		hasPrev := offset > 0
-		hasNext := offset+pageSize < len(all)
-		if hasPrev || hasNext {
-			sb.WriteString("\n")
-			if hasPrev {
-				sb.WriteString("[b]  Back\n")
+		for i, s := range all {
+			prefix := "  "
+			if i == cursor {
+				prefix = "> "
 			}
-			if hasNext {
-				sb.WriteString("[n]  Next\n")
-			}
+			sb.WriteString(fmt.Sprintf("%s[%d]  %s  (%s)\n",
+				prefix, s.ID, s.Title, s.UpdatedAt.Format("Jan 2 15:04")))
 		}
-		sb.WriteString("\n" + pickerStatusText.Render("Type a number to select, Enter to go back"))
+		sb.WriteString("\n" + pickerStatusText.Render("Enter to select  Esc to go back"))
 
 		fmt.Fprint(os.Stderr, "\033[2J\033[H")
 		rawFprintln("")
 		rawFprintln(pickerEditBox.Copy().Width(boxWidth).Render(sb.String()))
 
-		b, err := readByte()
+		key, err := readKey()
 		if err != nil {
 			return
 		}
 
-		switch {
-		case b == '\r' || b == '\n':
+		switch key {
+		case "esc", "ctrl+c":
 			return
-		case (b == 'n' || b == 'N') && hasNext:
-			offset += pageSize
-		case (b == 'b' || b == 'B') && hasPrev:
-			offset -= pageSize
-		default:
-			input := readDigits(b)
-			if input == "" {
+		case "enter":
+			if cursor < 0 || cursor >= len(all) {
 				continue
 			}
-			id, err := strconv.Atoi(input)
-			if err != nil {
-				continue
-			}
-
-			var session *db.Session
-			for i := range all {
-				if all[i].ID == id {
-					session = &all[i]
-					break
-				}
-			}
-			if session == nil {
-				continue
-			}
+			session := all[cursor]
 
 			var subSb strings.Builder
 			subSb.WriteString(renderLogoForPicker())
@@ -449,7 +415,7 @@ func editSessions(ctx context.Context, store *db.SessionStore, model string) {
 			subSb.WriteString(fmt.Sprintf("[%d]  %s  (%s)\n\n", session.ID, session.Title, session.UpdatedAt.Format("Jan 2 15:04")))
 			subSb.WriteString("[d]  Delete this conversation\n")
 			subSb.WriteString("[r]  Rename this conversation\n")
-			subSb.WriteString("\n" + pickerStatusText.Render("Type d or r, Enter to go back"))
+			subSb.WriteString("\n" + pickerStatusText.Render("d or r to act, Esc to go back"))
 
 			fmt.Fprint(os.Stderr, "\033[2J\033[H")
 			rawFprintln("")
@@ -481,8 +447,8 @@ func editSessions(ctx context.Context, store *db.SessionStore, model string) {
 					store.DeleteSession(ctx, session.ID)
 				}
 				all, _ = store.ListSessions(ctx)
-				if offset >= len(all) && offset > 0 {
-					offset = max(0, len(all)-pageSize)
+				if cursor >= len(all) {
+					cursor = max(0, len(all)-1)
 				}
 			case 'r', 'R':
 				var renSb strings.Builder
@@ -505,6 +471,14 @@ func editSessions(ctx context.Context, store *db.SessionStore, model string) {
 				}
 				all, _ = store.ListSessions(ctx)
 			}
+		case "up":
+			if cursor > 0 {
+				cursor--
+			}
+		case "down":
+			if cursor < len(all)-1 {
+				cursor++
+			}
 		}
 	}
 }
@@ -522,35 +496,6 @@ func readByte() (byte, error) {
 	return buf[0], nil
 }
 
-func readDigits(first byte) string {
-	if first < '0' || first > '9' {
-		return ""
-	}
-	input := string(first)
-	fmt.Fprint(os.Stderr, string(first))
-
-	for {
-		b, err := readByte()
-		if err != nil {
-			return input
-		}
-		if b == '\r' || b == '\n' {
-			return input
-		}
-		if b == 127 || b == 8 {
-			if len(input) > 0 {
-				input = input[:len(input)-1]
-				fmt.Fprint(os.Stderr, "\b \b")
-			}
-			continue
-		}
-		if b >= '0' && b <= '9' {
-			input += string(b)
-			fmt.Fprint(os.Stderr, string(b))
-		}
-	}
-}
-
 func readKey() (string, error) {
 	b, err := readByte()
 	if err != nil {
@@ -565,11 +510,10 @@ func readKey() (string, error) {
 	if b != '\033' {
 		return strings.ToLower(string(b)), nil
 	}
+	os.Stdin.SetReadDeadline(time.Now().Add(100 * time.Millisecond))
 	b2, err := readByte()
-	if err != nil {
-		return "esc", nil
-	}
-	if b2 != '[' {
+	os.Stdin.SetReadDeadline(time.Time{})
+	if err != nil || b2 != '[' {
 		return "esc", nil
 	}
 	b3, err := readByte()
