@@ -99,6 +99,9 @@ var (
 	logoFillStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("#E04040"))
 
+	logoOutlineStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#FFFFFF"))
+
 	logoSubStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("#FFA500")).
 			Italic(true)
@@ -155,15 +158,12 @@ var helpEntries = []helpEntry{
 }
 
 var logoSplash = []string{
-	"#####  ##  ##  #####  #####          ####  ##  ## ####### ",
-	"  #####  ##  ## ######  #####         ###### ##  ## ######  ",
-	"  ##     ##  ## ##     ###            ##  ## ##  ##   ##    ",
-	"  ###    ##  ## ####    ###           ##  ## ##  ##   ##    ",
-	"   ####  ##  ##  ####   #####  ###### ##  ## ##  ##   ##    ",
-	"     ##  ##  ##    ###    ### ####### ##  ## ##  ##   ##    ",
-	"     ### ##  ##     ##     ##         ##  ## ##  ##   ##    ",
-	"  #####  ###### ###### ######         ###### ######   ##    ",
-	"  #####   ####  #####  ######          ####   ####    ##    ",
+	"◉◉◉◉◉◉◉╗◉◉╗   ◉◉╗◉◉◉◉◉◉◉╗◉◉◉◉◉◉◉╗ ◉◉◉◉◉◉╗ ◉◉╗   ◉◉╗◉◉◉◉◉◉◉◉╗",
+	"◉◉╔════╝◉◉║   ◉◉║◉◉╔════╝◉◉╔════╝◉◉╔═══◉◉╗◉◉║   ◉◉║╚══◉◉╔══╝",
+	"◉◉◉◉◉◉◉╗◉◉║   ◉◉║◉◉◉◉◉◉◉╗◉◉◉◉◉◉◉╗◉◉║   ◉◉║◉◉║   ◉◉║   ◉◉║   ",
+	"╚════◉◉║◉◉║   ◉◉║╚════◉◉║╚════◉◉║◉◉║   ◉◉║◉◉║   ◉◉║   ◉◉║   ",
+	"◉◉◉◉◉◉◉║╚◉◉◉◉◉◉╔╝◉◉◉◉◉◉◉║◉◉◉◉◉◉◉║╚◉◉◉◉◉◉╔╝╚◉◉◉◉◉◉╔╝   ◉◉║   ",
+	"╚══════╝ ╚═════╝ ╚══════╝╚══════╝ ╚═════╝  ╚═════╝    ╚═╝   ",
 }
 
 type llmResponseMsg struct {
@@ -844,9 +844,12 @@ func (t *TUI) writeDocument(filepath, instructions string) tea.Cmd {
 func styleLogoLine(line string) string {
 	var sb strings.Builder
 	for _, c := range line {
-		if c == '#' {
+		switch c {
+		case '◉':
 			sb.WriteString(logoFillStyle.Render(string(c)))
-		} else {
+		case '╭', '╮', '╰', '╯', '│', '─', '╗', '╔', '╝', '║', '╚', '═':
+			sb.WriteString(logoOutlineStyle.Render(string(c)))
+		default:
 			sb.WriteRune(c)
 		}
 	}

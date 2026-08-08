@@ -29,18 +29,16 @@ var pickerEditBox = lipgloss.NewStyle().
 	Padding(0, 1)
 
 var pickerLogoLines = []string{
-	"#####  ##  ##  #####  #####          ####  ##  ## ####### ",
-	"  #####  ##  ## ######  #####         ###### ##  ## ######  ",
-	"  ##     ##  ## ##     ###            ##  ## ##  ##   ##    ",
-	"  ###    ##  ## ####    ###           ##  ## ##  ##   ##    ",
-	"   ####  ##  ##  ####   #####  ###### ##  ## ##  ##   ##    ",
-	"     ##  ##  ##    ###    ### ####### ##  ## ##  ##   ##    ",
-	"     ### ##  ##     ##     ##         ##  ## ##  ##   ##    ",
-	"  #####  ###### ###### ######         ###### ######   ##    ",
-	"  #####   ####  #####  ######          ####   ####    ##    ",
+	"●●●●●●●╗●●╗   ●●╗●●●●●●●╗●●●●●●●╗ ●●●●●●╗ ●●╗   ●●╗●●●●●●●●╗",
+	"●●╔════╝●●║   ●●║●●╔════╝●●╔════╝●●╔═══●●╗●●║   ●●║╚══●●╔══╝",
+	"●●●●●●●╗●●║   ●●║●●●●●●●╗●●●●●●●╗●●║   ●●║●●║   ●●║   ●●║   ",
+	"╚════●●║●●║   ●●║╚════●●║╚════●●║●●║   ●●║●●║   ●●║   ●●║   ",
+	"●●●●●●●║╚●●●●●●╔╝●●●●●●●║●●●●●●●║╚●●●●●●╔╝╚●●●●●●╔╝   ●●║   ",
+	"╚══════╝ ╚═════╝ ╚══════╝╚══════╝ ╚═════╝  ╚═════╝    ╚═╝   ",
 }
 
 var pickerLogoFill = lipgloss.NewStyle().Foreground(lipgloss.Color("#E04040"))
+var pickerLogoOutline = lipgloss.NewStyle().Foreground(lipgloss.Color("#FFFFFF"))
 
 var pickerStatusBar = lipgloss.NewStyle().
 	Border(lipgloss.RoundedBorder()).
@@ -325,9 +323,12 @@ func renderPickerLogo() string {
 	var sb strings.Builder
 	for _, line := range pickerLogoLines {
 		for _, c := range line {
-			if c == '#' {
+			switch c {
+			case '●':
 				sb.WriteString(pickerLogoFill.Render(string(c)))
-			} else {
+			case '╭', '╮', '╰', '╯', '│', '─', '╗', '╔', '╝', '║', '╚', '═':
+				sb.WriteString(pickerLogoOutline.Render(string(c)))
+			default:
 				sb.WriteRune(c)
 			}
 		}
