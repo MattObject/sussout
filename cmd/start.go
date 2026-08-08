@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"bufio"
 	"context"
 	"fmt"
 	"os"
@@ -16,6 +15,7 @@ import (
 	"github.com/matt/sussout/internal/llm"
 	"github.com/matt/sussout/internal/ui"
 	"github.com/spf13/cobra"
+	"golang.org/x/term"
 )
 
 var pickerBox = lipgloss.NewStyle().
@@ -39,14 +39,6 @@ var pickerLogoLines = []string{
 
 var pickerLogoFill = lipgloss.NewStyle().Foreground(lipgloss.Color("#E04040"))
 var pickerLogoOutline = lipgloss.NewStyle().Foreground(lipgloss.Color("#FFFFFF"))
-
-var pickerPrompt = lipgloss.NewStyle().
-	Foreground(lipgloss.Color("#FFFFFF"))
-
-var promptBorder = lipgloss.NewStyle().
-	Border(lipgloss.RoundedBorder()).
-	BorderForeground(lipgloss.Color("#FFFFFF")).
-	Padding(0, 1)
 
 var pickerStatusBar = lipgloss.NewStyle().
 	Border(lipgloss.RoundedBorder()).
@@ -131,10 +123,8 @@ var startCmd = &cobra.Command{
 
 		extractor := llm.NewAssumptionExtractor(llmClient)
 
-		reader := bufio.NewReader(os.Stdin)
-
 		for {
-			sessionID, quit, err := pickSession(ctx, store, reader, displayModel)
+			sessionID, quit, err := pickSession(ctx, store, displayModel)
 			if err != nil {
 				return fmt.Errorf("session selection: %w", err)
 			}
@@ -173,10 +163,12 @@ var startCmd = &cobra.Command{
 				fmt.Fprintln(os.Stderr)
 				bw := boxWidth
 				fmt.Fprintln(os.Stderr, pickerBox.Copy().Width(bw).Render(sb.String()))
-				printBorderedPrompt(bw)
 
-				resp, _ := reader.ReadString('\n')
-				if strings.ToLower(strings.TrimSpace(resp)) == "y" {
+				fd := int(os.Stdin.Fd())
+				oldState, _ := term.MakeRaw(fd)
+				b, _ := readByte()
+				term.Restore(fd, oldState)
+				if b == 'y' || b == 'Y' {
 					if err := store.DeleteSession(ctx, sessionID); err != nil {
 						fmt.Fprintf(os.Stderr, "Delete failed: %s\n", err)
 					} else {
@@ -224,7 +216,7 @@ var startCmd = &cobra.Command{
 	},
 }
 
-func pickSession(ctx context.Context, store *db.SessionStore, reader *bufio.Reader, model string) (int, bool, error) {
+func pickSession(ctx context.Context, store *db.SessionStore, model string) (int, bool, error) {
 	all, err := store.ListSessions(ctx)
 	if err != nil || len(all) == 0 {
 		if err == nil {
@@ -232,6 +224,13 @@ func pickSession(ctx context.Context, store *db.SessionStore, reader *bufio.Read
 		}
 		return 0, false, nil
 	}
+
+	fd := int(os.Stdin.Fd())
+	oldState, err := term.MakeRaw(fd)
+	if err != nil {
+		return 0, false, fmt.Errorf("raw terminal: %w", err)
+	}
+	defer term.Restore(fd, oldState)
 
 	offset := 0
 	batchSize := 3
@@ -280,63 +279,61 @@ func pickSession(ctx context.Context, store *db.SessionStore, reader *bufio.Read
 			statusErr = ""
 		}
 
-	fmt.Fprintln(os.Stderr)
-	bw := boxWidth
-	fmt.Fprintln(os.Stderr, pickerBox.Copy().Width(bw).Render(sb.String()))
-	printBorderedPrompt(bw)
+		fmt.Fprint(os.Stderr, "\r\033[J")
+		rawFprintln("")
+		rawFprintln(pickerBox.Copy().Width(boxWidth).Render(sb.String()))
 
-		input, err := reader.ReadString('\n')
+		b, err := readByte()
 		if err != nil {
 			return 0, false, nil
 		}
-		input = strings.TrimSpace(strings.ToLower(input))
 
-		if input == "" {
-			return 0, false, nil
-		}
-
-		if input == "q" {
+		switch b {
+		case 'q', 'Q':
 			fmt.Fprint(os.Stderr, "\033[2J\033[H")
 			return 0, true, nil
-		}
-
-		if input == "e" {
-			editSessions(ctx, store, reader, model)
+		case 'e', 'E':
+			editSessions(ctx, store, model)
 			all, _ = store.ListSessions(ctx)
 			offset = 0
 			if len(all) > 0 {
 				recentID = all[0].ID
 			}
 			continue
-		}
-
-		if input == "m" && hasMore {
-			offset += batchSize
-			continue
-		}
-
-		if input == "b" && hasPrev {
-			offset -= batchSize
-			continue
-		}
-
-		id, err := strconv.Atoi(input)
-		if err != nil {
-			statusErr = "Invalid input — type a session number."
-			continue
-		}
-
-		for _, s := range batch {
-			if s.ID == id {
-				return id, false, nil
+		case 'm', 'M':
+			if hasMore {
+				offset += batchSize
 			}
-		}
-		for _, s := range all {
-			if s.ID == id {
-				return id, false, nil
+			continue
+		case 'b', 'B':
+			if hasPrev {
+				offset -= batchSize
 			}
+			continue
+		case '\r', '\n':
+			return 0, false, nil
+		default:
+			input := readDigits(b)
+			if input == "" {
+				continue
+			}
+			id, err := strconv.Atoi(input)
+			if err != nil {
+				statusErr = "Invalid input — type a session number."
+				continue
+			}
+			for _, s := range batch {
+				if s.ID == id {
+					return id, false, nil
+				}
+			}
+			for _, s := range all {
+				if s.ID == id {
+					return id, false, nil
+				}
+			}
+			statusErr = fmt.Sprintf("Session %d not found.", id)
 		}
-		statusErr = fmt.Sprintf("Session %d not found.", id)
 	}
 }
 
@@ -370,11 +367,6 @@ func renderPickerLogo() string {
 	return sb.String()
 }
 
-func printBorderedPrompt(width int) {
-	fmt.Fprint(os.Stderr, "\n"+promptBorder.Copy().Width(width).Render(pickerPrompt.Render("> ")))
-	fmt.Fprint(os.Stderr, "\033[1A\033[6G")
-}
-
 func renderStatusOverlay(msg string) {
 	w := boxWidth
 	bar := pickerStatusBar.Copy().Width(w).Render("\n" + pickerStatusText.Render(msg) + "\n")
@@ -388,6 +380,11 @@ func clearStatusOverlay() {
 
 const boxWidth = 64
 
+func rawFprintln(s string) {
+	s = strings.ReplaceAll(s, "\n", "\r\n")
+	fmt.Fprint(os.Stderr, s+"\r\n")
+}
+
 func showWelcome(model string) {
 	bw := boxWidth
 	fmt.Fprintln(os.Stderr)
@@ -396,7 +393,7 @@ func showWelcome(model string) {
 	fmt.Fprintln(os.Stderr)
 }
 
-func editSessions(ctx context.Context, store *db.SessionStore, reader *bufio.Reader, model string) {
+func editSessions(ctx context.Context, store *db.SessionStore, model string) {
 	all, err := store.ListSessions(ctx)
 	if err != nil || len(all) == 0 {
 		return
@@ -436,114 +433,174 @@ func editSessions(ctx context.Context, store *db.SessionStore, reader *bufio.Rea
 		}
 		sb.WriteString("\n" + pickerStatusText.Render("Type a number to select, Enter to go back"))
 
-		fmt.Fprintln(os.Stderr)
-		bw := boxWidth
-		fmt.Fprintln(os.Stderr, pickerEditBox.Copy().Width(bw).Render(sb.String()))
-		printBorderedPrompt(bw)
+		fmt.Fprint(os.Stderr, "\r\033[J")
+		rawFprintln("")
+		rawFprintln(pickerEditBox.Copy().Width(boxWidth).Render(sb.String()))
 
-		input, err := reader.ReadString('\n')
+		b, err := readByte()
 		if err != nil {
 			return
 		}
-		input = strings.TrimSpace(strings.ToLower(input))
 
-		if input == "" {
+		switch {
+		case b == '\r' || b == '\n':
 			return
-		}
-		if input == "n" && hasNext {
+		case (b == 'n' || b == 'N') && hasNext:
 			offset += pageSize
-			continue
-		}
-		if input == "b" && hasPrev {
+		case (b == 'b' || b == 'B') && hasPrev:
 			offset -= pageSize
-			continue
-		}
-
-		id, err := strconv.Atoi(input)
-		if err != nil {
-			continue
-		}
-
-		var session *db.Session
-		for i := range all {
-			if all[i].ID == id {
-				session = &all[i]
-				break
+		default:
+			input := readDigits(b)
+			if input == "" {
+				continue
 			}
-		}
-		if session == nil {
-			continue
-		}
-
-		var subSb strings.Builder
-		subSb.WriteString(renderLogoForPicker())
-		subSb.WriteString("\n")
-		subSb.WriteString(pickerStatusText.Render("Using model: " + model))
-		subSb.WriteString("\n\n")
-		subSb.WriteString(pickerHeader + "\n\n")
-		subSb.WriteString(fmt.Sprintf("[%d]  %s  (%s)\n\n", session.ID, session.Title, session.UpdatedAt.Format("Jan 2 15:04")))
-		subSb.WriteString("[d]  Delete this conversation\n")
-		subSb.WriteString("[r]  Rename this conversation\n")
-		subSb.WriteString("\n" + pickerStatusText.Render("Type d or r, Enter to go back"))
-
-		fmt.Fprintln(os.Stderr)
-		fmt.Fprintln(os.Stderr, pickerEditBox.Copy().Width(bw).Render(subSb.String()))
-		printBorderedPrompt(bw)
-
-		sub, err := reader.ReadString('\n')
-		if err != nil {
-			return
-		}
-		sub = strings.TrimSpace(strings.ToLower(sub))
-
-		switch sub {
-		case "d":
-			var delSb strings.Builder
-			delSb.WriteString(renderLogoForPicker())
-			delSb.WriteString("\n")
-			delSb.WriteString(pickerStatusText.Render("Using model: " + model))
-			delSb.WriteString("\n\n")
-			delSb.WriteString(pickerHeader + "\n\n")
-			delSb.WriteString(fmt.Sprintf("Delete session %d: %s?\n\n", session.ID, session.Title))
-			delSb.WriteString(pickerError.Render("[y]  Yes, delete\n"))
-			delSb.WriteString(pickerStatusText.Render("Enter to cancel"))
-
-			fmt.Fprintln(os.Stderr)
-			fmt.Fprintln(os.Stderr, pickerEditBox.Copy().Width(bw).Render(delSb.String()))
-			printBorderedPrompt(bw)
-
-			confirm, _ := reader.ReadString('\n')
-			if strings.ToLower(strings.TrimSpace(confirm)) == "y" {
-				store.DeleteSession(ctx, session.ID)
+			id, err := strconv.Atoi(input)
+			if err != nil {
+				continue
 			}
-			all, _ = store.ListSessions(ctx)
-			if offset >= len(all) && offset > 0 {
-				offset = max(0, len(all)-pageSize)
-			}
-		case "r":
-			var renSb strings.Builder
-			renSb.WriteString(renderLogoForPicker())
-			renSb.WriteString("\n")
-			renSb.WriteString(pickerStatusText.Render("Using model: " + model))
-			renSb.WriteString("\n\n")
-			renSb.WriteString(pickerHeader + "\n\n")
-			renSb.WriteString(fmt.Sprintf("Rename session %d\nCurrent: %s\n\n", session.ID, session.Title))
-			renSb.WriteString(pickerStatusText.Render("Type new title, or Enter to cancel"))
 
-			fmt.Fprintln(os.Stderr)
-			fmt.Fprintln(os.Stderr, pickerEditBox.Copy().Width(bw).Render(renSb.String()))
-			printBorderedPrompt(bw)
-
-			title, _ := reader.ReadString('\n')
-			title = strings.TrimSpace(title)
-			if title != "" {
-				store.SetTitle(ctx, session.ID, title)
+			var session *db.Session
+			for i := range all {
+				if all[i].ID == id {
+					session = &all[i]
+					break
+				}
 			}
-			all, _ = store.ListSessions(ctx)
+			if session == nil {
+				continue
+			}
+
+			var subSb strings.Builder
+			subSb.WriteString(renderLogoForPicker())
+			subSb.WriteString("\n")
+			subSb.WriteString(pickerStatusText.Render("Using model: " + model))
+			subSb.WriteString("\n\n")
+			subSb.WriteString(pickerHeader + "\n\n")
+			subSb.WriteString(fmt.Sprintf("[%d]  %s  (%s)\n\n", session.ID, session.Title, session.UpdatedAt.Format("Jan 2 15:04")))
+			subSb.WriteString("[d]  Delete this conversation\n")
+			subSb.WriteString("[r]  Rename this conversation\n")
+			subSb.WriteString("\n" + pickerStatusText.Render("Type d or r, Enter to go back"))
+
+			fmt.Fprint(os.Stderr, "\r\033[J")
+			rawFprintln("")
+			rawFprintln(pickerEditBox.Copy().Width(boxWidth).Render(subSb.String()))
+
+			subB, err := readByte()
+			if err != nil {
+				return
+			}
+
+			switch subB {
+			case 'd', 'D':
+				var delSb strings.Builder
+				delSb.WriteString(renderLogoForPicker())
+				delSb.WriteString("\n")
+				delSb.WriteString(pickerStatusText.Render("Using model: " + model))
+				delSb.WriteString("\n\n")
+				delSb.WriteString(pickerHeader + "\n\n")
+				delSb.WriteString(fmt.Sprintf("Delete session %d: %s?\n\n", session.ID, session.Title))
+				delSb.WriteString(pickerError.Render("[y]  Yes, delete\n"))
+				delSb.WriteString(pickerStatusText.Render("Enter to cancel"))
+
+				fmt.Fprint(os.Stderr, "\r\033[J")
+				rawFprintln("")
+				rawFprintln(pickerEditBox.Copy().Width(boxWidth).Render(delSb.String()))
+
+				confirmB, _ := readByte()
+				if confirmB == 'y' || confirmB == 'Y' {
+					store.DeleteSession(ctx, session.ID)
+				}
+				all, _ = store.ListSessions(ctx)
+				if offset >= len(all) && offset > 0 {
+					offset = max(0, len(all)-pageSize)
+				}
+			case 'r', 'R':
+				var renSb strings.Builder
+				renSb.WriteString(renderLogoForPicker())
+				renSb.WriteString("\n")
+				renSb.WriteString(pickerStatusText.Render("Using model: " + model))
+				renSb.WriteString("\n\n")
+				renSb.WriteString(pickerHeader + "\n\n")
+				renSb.WriteString(fmt.Sprintf("Rename session %d\nCurrent: %s\n\n", session.ID, session.Title))
+				renSb.WriteString(pickerStatusText.Render("Type new title, or Enter to cancel"))
+
+				fmt.Fprint(os.Stderr, "\r\033[J")
+				rawFprintln("")
+				rawFprintln(pickerEditBox.Copy().Width(boxWidth).Render(renSb.String()))
+
+				title := readLineRaw()
+				title = strings.TrimSpace(title)
+				if title != "" {
+					store.SetTitle(ctx, session.ID, title)
+				}
+				all, _ = store.ListSessions(ctx)
+			}
 		}
 	}
 }
 
 func renderLogoForPicker() string {
 	return renderPickerLogo()
+}
+
+func readByte() (byte, error) {
+	var buf [1]byte
+	_, err := os.Stdin.Read(buf[:])
+	if err != nil {
+		return 0, err
+	}
+	return buf[0], nil
+}
+
+func readDigits(first byte) string {
+	if first < '0' || first > '9' {
+		return ""
+	}
+	input := string(first)
+	fmt.Fprint(os.Stderr, string(first))
+
+	for {
+		b, err := readByte()
+		if err != nil {
+			return input
+		}
+		if b == '\r' || b == '\n' {
+			return input
+		}
+		if b == 127 || b == 8 {
+			if len(input) > 0 {
+				input = input[:len(input)-1]
+				fmt.Fprint(os.Stderr, "\b \b")
+			}
+			continue
+		}
+		if b >= '0' && b <= '9' {
+			input += string(b)
+			fmt.Fprint(os.Stderr, string(b))
+		}
+	}
+}
+
+func readLineRaw() string {
+	var input []byte
+	for {
+		b, err := readByte()
+		if err != nil {
+			return string(input)
+		}
+		if b == '\r' || b == '\n' {
+			return string(input)
+		}
+		if b == 127 || b == 8 {
+			if len(input) > 0 {
+				input = input[:len(input)-1]
+				fmt.Fprint(os.Stderr, "\b \b")
+			}
+			continue
+		}
+		if b >= 32 && b <= 126 {
+			input = append(input, b)
+			fmt.Fprint(os.Stderr, string(b))
+		}
+	}
 }
