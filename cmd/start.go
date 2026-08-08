@@ -230,7 +230,11 @@ func pickSession(ctx context.Context, store *db.SessionStore, model string) (int
 	if err != nil {
 		return 0, false, fmt.Errorf("raw terminal: %w", err)
 	}
-	defer term.Restore(fd, oldState)
+	fmt.Fprint(os.Stderr, "\033[?25l")
+	defer func() {
+		fmt.Fprint(os.Stderr, "\033[?25h")
+		term.Restore(fd, oldState)
+	}()
 
 	offset := 0
 	batchSize := 3
@@ -279,7 +283,7 @@ func pickSession(ctx context.Context, store *db.SessionStore, model string) (int
 			statusErr = ""
 		}
 
-		fmt.Fprint(os.Stderr, "\r\033[J")
+		fmt.Fprint(os.Stderr, "\033[2J\033[H")
 		rawFprintln("")
 		rawFprintln(pickerBox.Copy().Width(boxWidth).Render(sb.String()))
 
@@ -433,7 +437,7 @@ func editSessions(ctx context.Context, store *db.SessionStore, model string) {
 		}
 		sb.WriteString("\n" + pickerStatusText.Render("Type a number to select, Enter to go back"))
 
-		fmt.Fprint(os.Stderr, "\r\033[J")
+		fmt.Fprint(os.Stderr, "\033[2J\033[H")
 		rawFprintln("")
 		rawFprintln(pickerEditBox.Copy().Width(boxWidth).Render(sb.String()))
 
@@ -481,7 +485,7 @@ func editSessions(ctx context.Context, store *db.SessionStore, model string) {
 			subSb.WriteString("[r]  Rename this conversation\n")
 			subSb.WriteString("\n" + pickerStatusText.Render("Type d or r, Enter to go back"))
 
-			fmt.Fprint(os.Stderr, "\r\033[J")
+			fmt.Fprint(os.Stderr, "\033[2J\033[H")
 			rawFprintln("")
 			rawFprintln(pickerEditBox.Copy().Width(boxWidth).Render(subSb.String()))
 
@@ -502,7 +506,7 @@ func editSessions(ctx context.Context, store *db.SessionStore, model string) {
 				delSb.WriteString(pickerError.Render("[y]  Yes, delete\n"))
 				delSb.WriteString(pickerStatusText.Render("Enter to cancel"))
 
-				fmt.Fprint(os.Stderr, "\r\033[J")
+				fmt.Fprint(os.Stderr, "\033[2J\033[H")
 				rawFprintln("")
 				rawFprintln(pickerEditBox.Copy().Width(boxWidth).Render(delSb.String()))
 
@@ -524,7 +528,7 @@ func editSessions(ctx context.Context, store *db.SessionStore, model string) {
 				renSb.WriteString(fmt.Sprintf("Rename session %d\nCurrent: %s\n\n", session.ID, session.Title))
 				renSb.WriteString(pickerStatusText.Render("Type new title, or Enter to cancel"))
 
-				fmt.Fprint(os.Stderr, "\r\033[J")
+				fmt.Fprint(os.Stderr, "\033[2J\033[H")
 				rawFprintln("")
 				rawFprintln(pickerEditBox.Copy().Width(boxWidth).Render(renSb.String()))
 
