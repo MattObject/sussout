@@ -260,7 +260,7 @@ func pickSession(ctx context.Context, store *db.SessionStore, model string) (int
 				prefix, s.ID, s.Title, s.UpdatedAt.Format("Jan 2 15:04"), star))
 		}
 		sb.WriteString("\n")
-		sb.WriteString("[⏎]  Start new conversation\n")
+		sb.WriteString("[n]  Start new conversation\n")
 		sb.WriteString("[e]  Edit conversations\n")
 		sb.WriteString("[q]  Quit\n")
 
@@ -282,6 +282,8 @@ func pickSession(ctx context.Context, store *db.SessionStore, model string) (int
 		case "q":
 			fmt.Fprint(os.Stderr, "\033[2J\033[H")
 			return 0, true, nil
+		case "n":
+			return 0, false, nil
 		case "e":
 			editSessions(ctx, store, model)
 			all, _ = store.ListSessions(ctx)
@@ -299,9 +301,8 @@ func pickSession(ctx context.Context, store *db.SessionStore, model string) (int
 			if cursor >= 0 && cursor < len(all) {
 				return all[cursor].ID, false, nil
 			}
-			return 0, false, nil
 		default:
-			statusErr = "Use ↑↓ to select, Enter to open, q to quit"
+			statusErr = "Use ↑↓ to select, Enter to open, n for new, q to quit"
 		}
 	}
 }
