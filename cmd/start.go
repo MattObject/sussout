@@ -236,44 +236,30 @@ func pickSession(ctx context.Context, store *db.SessionStore, model string) (int
 		term.Restore(fd, oldState)
 	}()
 
-	offset := 0
-	batchSize := 3
-	recentID := all[0].ID
+	cursor := 0
 	var statusErr string
 
 	for {
-		end := offset + batchSize
-		if end > len(all) {
-			end = len(all)
-		}
-		batch := all[offset:end]
-
 		var sb strings.Builder
 		sb.WriteString(renderLogoForPicker())
 		sb.WriteString("\n")
 		sb.WriteString(pickerStatusText.Render("Using model: " + model))
 		sb.WriteString("\n\n")
 		sb.WriteString(pickerHeader + "\n\n")
-		for _, s := range batch {
-			prefix := ""
-			if s.ID == recentID {
-				prefix = "★ "
-			}
-			sb.WriteString(fmt.Sprintf("[%d]  %s%s  (%s)\n",
-				s.ID, prefix, s.Title, s.UpdatedAt.Format("Jan 2 15:04")))
-		}
 
-		hasPrev := offset > 0
-		hasMore := end < len(all)
-		if hasPrev || hasMore {
-			sb.WriteString("\n")
-			if hasPrev {
-				sb.WriteString("[b]  Back\n")
+		for i, s := range all {
+			prefix := "  "
+			if i == cursor {
+				prefix = "> "
 			}
-			if hasMore {
-				sb.WriteString("[m]  More sessions...\n")
+			star := ""
+			if i == 0 {
+				star = " ★"
 			}
+			sb.WriteString(fmt.Sprintf("%s[%d]  %s  (%s)%s\n",
+				prefix, s.ID, s.Title, s.UpdatedAt.Format("Jan 2 15:04"), star))
 		}
+		sb.WriteString("\n")
 		sb.WriteString("[⏎]  Start new conversation\n")
 		sb.WriteString("[e]  Edit conversations\n")
 		sb.WriteString("[q]  Quit\n")
@@ -287,56 +273,35 @@ func pickSession(ctx context.Context, store *db.SessionStore, model string) (int
 		rawFprintln("")
 		rawFprintln(pickerBox.Copy().Width(boxWidth).Render(sb.String()))
 
-		b, err := readByte()
+		key, err := readKey()
 		if err != nil {
 			return 0, false, nil
 		}
 
-		switch b {
-		case 'q', 'Q':
+		switch key {
+		case "q":
 			fmt.Fprint(os.Stderr, "\033[2J\033[H")
 			return 0, true, nil
-		case 'e', 'E':
+		case "e":
 			editSessions(ctx, store, model)
 			all, _ = store.ListSessions(ctx)
-			offset = 0
-			if len(all) > 0 {
-				recentID = all[0].ID
-			}
+			cursor = 0
 			continue
-		case 'm', 'M':
-			if hasMore {
-				offset += batchSize
+		case "up":
+			if cursor > 0 {
+				cursor--
 			}
-			continue
-		case 'b', 'B':
-			if hasPrev {
-				offset -= batchSize
+		case "down":
+			if cursor < len(all)-1 {
+				cursor++
 			}
-			continue
-		case '\r', '\n':
+		case "enter":
+			if cursor >= 0 && cursor < len(all) {
+				return all[cursor].ID, false, nil
+			}
 			return 0, false, nil
 		default:
-			input := readDigits(b)
-			if input == "" {
-				continue
-			}
-			id, err := strconv.Atoi(input)
-			if err != nil {
-				statusErr = "Invalid input — type a session number."
-				continue
-			}
-			for _, s := range batch {
-				if s.ID == id {
-					return id, false, nil
-				}
-			}
-			for _, s := range all {
-				if s.ID == id {
-					return id, false, nil
-				}
-			}
-			statusErr = fmt.Sprintf("Session %d not found.", id)
+			statusErr = "Use ↑↓ to select, Enter to open, q to quit"
 		}
 	}
 }
@@ -583,6 +548,40 @@ func readDigits(first byte) string {
 			fmt.Fprint(os.Stderr, string(b))
 		}
 	}
+}
+
+func readKey() (string, error) {
+	b, err := readByte()
+	if err != nil {
+		return "", err
+	}
+	if b == '\r' || b == '\n' {
+		return "enter", nil
+	}
+	if b == 3 {
+		return "ctrl+c", nil
+	}
+	if b != '\033' {
+		return strings.ToLower(string(b)), nil
+	}
+	b2, err := readByte()
+	if err != nil {
+		return "esc", nil
+	}
+	if b2 != '[' {
+		return "esc", nil
+	}
+	b3, err := readByte()
+	if err != nil {
+		return "esc", nil
+	}
+	switch b3 {
+	case 'A':
+		return "up", nil
+	case 'B':
+		return "down", nil
+	}
+	return "esc", nil
 }
 
 func readLineRaw() string {
