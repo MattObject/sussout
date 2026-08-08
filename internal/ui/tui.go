@@ -132,6 +132,29 @@ var (
 var validCommands = map[string]bool{
 	"/?": true, "/help": true, "/new": true, "/reset": true,
 	"/model": true, "/write": true, "/export": true, "/quit": true,
+	"/close": true, "/delete": true, "/title": true,
+	"/assumptions": true, "/about": true, "/save": true,
+}
+
+type helpEntry struct {
+	cmd, label, desc string
+	needsInput       bool
+	inputPlaceholder string
+}
+
+var helpEntries = []helpEntry{
+	{"/?", "/?", "Show this help", false, ""},
+	{"/new", "/new", "Start a new conversation", false, ""},
+	{"/close", "/close", "Save and return to start screen", false, ""},
+	{"/delete", "/delete", "Delete this conversation entirely", false, ""},
+	{"/title", "/title <text>", "Rename the current session", true, "New session title..."},
+	{"/reset", "/reset", "Clear history in this session", false, ""},
+	{"/assumptions", "/assumptions", "List assumptions identified by the agent", false, ""},
+	{"/model", "/model", "Select a model from the current server", false, ""},
+	{"/write", "/write [file] [instructions]", "Export session to a Markdown file", true, "File path [instructions]..."},
+	{"/save", "/save", "Show save status", false, ""},
+	{"/about", "/about", "Show version and model info", false, ""},
+	{"/quit", "/quit", "Exit the application", false, ""},
 }
 
 var logoSplash = []string{
@@ -180,12 +203,16 @@ type TUI struct {
 
 	showHelp      bool
 	showModels    bool
+	showAbout     bool
+	helpCursor    int
+	pendingCmd    string
 	modelList     []string
 	modelIndex    int
 	editServer    bool
 	editAPIKey    bool
 	pendingURL    string
 	NewSession    bool
+	QuitApp       bool
 	statusError   string
 	statusSuccess string
 
@@ -275,10 +302,19 @@ case tea.KeyMsg:
 			return t, nil
 		}
 
-		if (t.showHelp || t.showModels) && !t.editServer && !t.editAPIKey {
+		if t.pendingCmd != "" && msg.String() == "esc" {
+			t.pendingCmd = ""
+			t.textarea.Placeholder = ""
+			t.textarea.Reset()
+			t.textarea.Focus()
+			return t, nil
+		}
+
+		if (t.showHelp || t.showModels || t.showAbout) && !t.editServer && !t.editAPIKey {
 			if msg.String() == "esc" {
 				t.showHelp = false
 				t.showModels = false
+				t.showAbout = false
 				t.textarea.Focus()
 				return t, nil
 			}
@@ -307,6 +343,22 @@ case tea.KeyMsg:
 						t.textarea.Focus()
 						t.statusSuccess = fmt.Sprintf("Switched to: %s", t.modelList[mi])
 						t.saveConfig()
+					}
+				}
+			}
+			if t.showHelp {
+				switch msg.String() {
+				case "up", "k":
+					if t.helpCursor > 0 {
+						t.helpCursor--
+					}
+				case "down", "j":
+					if t.helpCursor < len(helpEntries)-1 {
+						t.helpCursor++
+					}
+				case "enter":
+					if cmd := t.doHelpCommand(t.helpCursor); cmd != nil {
+						return t, cmd
 					}
 				}
 			}
@@ -345,6 +397,30 @@ case tea.KeyMsg:
 				return t, t.tryServerKey(t.pendingURL, key)
 			}
 
+			if t.pendingCmd != "" {
+				arg := strings.TrimSpace(t.textarea.Value())
+				if arg == "" {
+					return t, nil
+				}
+				t.textarea.Reset()
+				t.textarea.Placeholder = ""
+				cmd := t.pendingCmd
+				t.pendingCmd = ""
+				t.textarea.Focus()
+				switch cmd {
+				case "/title":
+					t.store.SetTitle(context.Background(), t.sessionID, arg)
+					t.statusSuccess = "Title updated."
+					return t, nil
+				case "/write":
+					filepath, instructions := parseWriteArgs(arg)
+					t.thinking = true
+					t.textarea.Blur()
+					t.statusSuccess = fmt.Sprintf("Generating document with %s...", t.brain.CurrentModel())
+					return t, t.writeDocument(filepath, instructions)
+				}
+			}
+
 			input := strings.TrimSpace(t.textarea.Value())
 			if input == "" {
 				return t, nil
@@ -363,11 +439,13 @@ case tea.KeyMsg:
 			}
 
 			if strings.ToLower(input) == "/quit" {
+				t.QuitApp = true
 				return t, tea.Quit
 			}
 
 			if input == "/?" || strings.ToLower(input) == "/help" {
 				t.showHelp = true
+				t.helpCursor = 0
 				t.textarea.Blur()
 				t.textarea.Reset()
 				return t, nil
@@ -414,6 +492,69 @@ case tea.KeyMsg:
 				t.rawLines = nil
 				t.appendLine("", false)
 				t.appendLine("", false)
+				return t, nil
+			}
+
+			if input == "/close" {
+				t.NewSession = true
+				t.statusSuccess = "Saved. Returning to start screen..."
+				return t, tea.Quit
+			}
+
+			if input == "/delete" {
+				t.store.DeleteSession(context.Background(), t.sessionID)
+				t.NewSession = true
+				return t, tea.Quit
+			}
+
+			if input == "/title" {
+				t.statusError = "Usage: /title <new title>"
+				t.textarea.Reset()
+				return t, nil
+			}
+
+			if strings.HasPrefix(input, "/title ") {
+				title := strings.TrimSpace(strings.TrimPrefix(input, "/title "))
+				if title != "" {
+					t.store.SetTitle(context.Background(), t.sessionID, title)
+					t.statusSuccess = "Title updated."
+				}
+				t.textarea.Reset()
+				return t, nil
+			}
+
+			if input == "/assumptions" {
+				assumptions, err := t.store.GetAssumptions(context.Background(), t.sessionID)
+				t.textarea.Reset()
+				if err != nil {
+					t.statusError = "Could not load assumptions."
+					return t, nil
+				}
+				if len(assumptions) == 0 {
+					t.appendLine("No assumptions recorded yet.", false)
+					t.appendLine("", false)
+				} else {
+					var sb strings.Builder
+					sb.WriteString("## Assumptions\n\n")
+					for _, a := range assumptions {
+						sb.WriteString(fmt.Sprintf("- %s *(status: %s)*\n", a.Content, a.Status))
+					}
+					t.appendLine(sb.String(), false)
+					t.appendLine("", false)
+				}
+				return t, nil
+			}
+
+			if input == "/about" {
+				t.showAbout = true
+				t.textarea.Blur()
+				t.textarea.Reset()
+				return t, nil
+			}
+
+			if input == "/save" {
+				t.textarea.Reset()
+				t.statusSuccess = "All progress is saved automatically."
 				return t, nil
 			}
 
@@ -545,7 +686,7 @@ func (t *TUI) View() string {
 	statusBar := statusBorder.Render(status)
 
 	var inputArea string
-	if (t.showHelp || t.showModels) && !t.editServer && !t.editAPIKey {
+	if (t.showHelp || t.showModels || t.showAbout) && !t.editServer && !t.editAPIKey {
 		inputArea = inputBorderDim.Render(t.textarea.View())
 	} else {
 		inputArea = inputBorder.Render(t.textarea.View())
@@ -556,6 +697,8 @@ func (t *TUI) View() string {
 		centerArea = t.renderHelp()
 	} else if t.showModels {
 		centerArea = t.renderModels()
+	} else if t.showAbout {
+		centerArea = t.renderAbout()
 	} else {
 		centerArea = chatBorder.Render(t.viewport.View())
 	}
@@ -721,35 +864,117 @@ func (t *TUI) renderHelp() string {
 	title := helpTitle.Render("Commands")
 	divider := strings.Repeat("─", 40)
 
-	entries := []struct {
-		cmd, desc string
-	}{
-		{"/?", "Show this help"},
-		{"/new", "Save and start a new conversation"},
-		{"/reset", "Clear conversation history in this session"},
-		{"/model", "Select a model from the current server"},
-		{"/write [file] [instructions]", "Export session to a Markdown file"},
-		{"/quit", "Exit the session"},
-	}
+	selected := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("#FFD700")).
+		Bold(true)
 
 	var sb strings.Builder
 	sb.WriteString(title)
 	sb.WriteString("\n")
 	sb.WriteString(divider)
 	sb.WriteString("\n\n")
-	for _, e := range entries {
-		sb.WriteString(helpCmd.Render(e.cmd))
+	for i, e := range helpEntries {
+		if i == t.helpCursor {
+			sb.WriteString(selected.Render("> " + e.label))
+		} else {
+			sb.WriteString(helpCmd.Render("  " + e.label))
+		}
 		sb.WriteString("\n")
-		sb.WriteString(helpDesc.Render("  " + e.desc))
+		sb.WriteString(helpDesc.Render("    " + e.desc))
 		sb.WriteString("\n\n")
 	}
-	sb.WriteString(helpDesc.Render("Press esc to close help"))
+	sb.WriteString(helpDesc.Render("↑↓ to navigate  enter to select  esc to close"))
 
 	content := lipgloss.NewStyle().
 		Width(t.width - 8).
 		Render(sb.String())
 
 	return helpBorder.Width(t.width - 4).Height(t.viewport.Height).Render(content)
+}
+
+func (t *TUI) doHelpCommand(idx int) tea.Cmd {
+	if idx < 0 || idx >= len(helpEntries) {
+		return nil
+	}
+	entry := helpEntries[idx]
+
+	if entry.needsInput {
+		t.showHelp = false
+		t.pendingCmd = entry.cmd
+		t.textarea.Placeholder = entry.inputPlaceholder
+		t.textarea.Focus()
+		t.textarea.Reset()
+		return nil
+	}
+
+	t.showHelp = false
+	t.textarea.Focus()
+
+	switch entry.cmd {
+	case "/?":
+		t.showHelp = true
+		return nil
+	case "/new":
+		t.NewSession = true
+		t.statusSuccess = "Starting a new conversation..."
+		return tea.Quit
+	case "/close":
+		t.NewSession = true
+		t.statusSuccess = "Saved. Returning to start screen..."
+		return tea.Quit
+	case "/delete":
+		t.store.DeleteSession(context.Background(), t.sessionID)
+		t.NewSession = true
+		return tea.Quit
+	case "/reset":
+		t.store.ClearMessages(context.Background(), t.sessionID)
+		t.store.ClearAssumptions(context.Background(), t.sessionID)
+		t.brain.ResetHistory()
+		t.textarea.Reset()
+		t.rawLines = nil
+		t.appendLine("", false)
+		t.appendLine("", false)
+		return nil
+	case "/assumptions":
+		assumptions, err := t.store.GetAssumptions(context.Background(), t.sessionID)
+		if err != nil {
+			t.statusError = "Could not load assumptions."
+			return nil
+		}
+		if len(assumptions) == 0 {
+			t.appendLine("No assumptions recorded yet.", false)
+			t.appendLine("", false)
+		} else {
+			var sb strings.Builder
+			sb.WriteString("## Assumptions\n\n")
+			for _, a := range assumptions {
+				sb.WriteString(fmt.Sprintf("- %s *(status: %s)*\n", a.Content, a.Status))
+			}
+			t.appendLine(sb.String(), false)
+			t.appendLine("", false)
+		}
+		return nil
+	case "/model":
+		t.showModels = true
+		t.modelIndex = 0
+		models, err := t.brain.ListModels(context.Background())
+		if err != nil {
+			t.modelList = []string{"(error loading models)"}
+		} else {
+			t.modelList = models
+		}
+		return nil
+	case "/save":
+		t.statusSuccess = "All progress is saved automatically."
+		return nil
+	case "/about":
+		t.showAbout = true
+		return nil
+	case "/quit":
+		t.QuitApp = true
+		return tea.Quit
+	}
+	return nil
 }
 
 func (t *TUI) renderModels() string {
@@ -808,6 +1033,36 @@ func (t *TUI) renderModels() string {
 	return helpBorder.Width(t.width - 4).Height(t.viewport.Height).Render(content)
 }
 
+func (t *TUI) renderAbout() string {
+	if t.width == 0 {
+		return ""
+	}
+
+	title := helpTitle.Render("About Sussout")
+	divider := strings.Repeat("─", 40)
+
+	var sb strings.Builder
+	sb.WriteString(title)
+	sb.WriteString("\n")
+	sb.WriteString(divider)
+	sb.WriteString("\n\n")
+	sb.WriteString("Sussout v2.0.0 — Socratic stress-testing of ideas.")
+	sb.WriteString("\n\n")
+	sb.WriteString("Model: " + t.brain.CurrentModel())
+	sb.WriteString("\n\n")
+	sb.WriteString("Server: " + t.brain.ServerURL())
+	sb.WriteString("\n\n")
+	sb.WriteString(fmt.Sprintf("Session: %d", t.sessionID))
+	sb.WriteString("\n\n")
+	sb.WriteString(helpDesc.Render("Press esc to close"))
+
+	content := lipgloss.NewStyle().
+		Width(t.width - 8).
+		Render(sb.String())
+
+	return helpBorder.Width(t.width - 4).Height(t.viewport.Height).Render(content)
+}
+
 func (t *TUI) Run(sessionID int, recapSummary string) error {
 	t.sessionID = sessionID
 
@@ -819,6 +1074,9 @@ func (t *TUI) Run(sessionID int, recapSummary string) error {
 	}
 
 	_, err := tea.NewProgram(t, tea.WithAltScreen()).Run()
+	if t.QuitApp {
+		fmt.Print("\033[2J\033[H")
+	}
 	return err
 }
 

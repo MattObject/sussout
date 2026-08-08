@@ -23,6 +23,11 @@ var pickerBox = lipgloss.NewStyle().
 	BorderForeground(lipgloss.Color("#5B9BD5")).
 	Padding(0, 1)
 
+var pickerEditBox = lipgloss.NewStyle().
+	Border(lipgloss.RoundedBorder()).
+	BorderForeground(lipgloss.Color("#E04040")).
+	Padding(0, 1)
+
 var pickerLogoLines = []string{
 	"●●●●●●●╗●●╗   ●●╗●●●●●●●╗●●●●●●●╗ ●●●●●●╗ ●●╗   ●●╗●●●●●●●●╗",
 	"●●╔════╝●●║   ●●║●●╔════╝●●╔════╝●●╔═══●●╗●●║   ●●║╚══●●╔══╝",
@@ -57,9 +62,8 @@ var pickerHeader = lipgloss.NewStyle().
 	Bold(true).
 	Render("Recent Sessions")
 
-var pickerHint = lipgloss.NewStyle().
-	Foreground(lipgloss.Color("#888888")).
-	Render("Type a number to resume, 'm' for more, Enter for new")
+var pickerError = lipgloss.NewStyle().
+	Foreground(lipgloss.Color("#FF6B6B"))
 
 var (
 	startTitle   string
@@ -82,6 +86,7 @@ var startCmd = &cobra.Command{
 	Use:   "start",
 	Short: "Start a new Socratic session, or pick up a recent one",
 	RunE: func(cmd *cobra.Command, args []string) error {
+		fmt.Fprint(os.Stderr, "\033[2J\033[H")
 		cfg := config.Load(startPreset)
 
 		if cfg.DatabaseURL == "" {
@@ -123,16 +128,18 @@ var startCmd = &cobra.Command{
 			}
 			displayModel = detected
 		}
-		fmt.Fprintf(os.Stderr, "\nUsing model: %s\n\n", displayModel)
 
 		extractor := llm.NewAssumptionExtractor(llmClient)
 
 		reader := bufio.NewReader(os.Stdin)
 
 		for {
-			sessionID, err := pickSession(ctx, store, reader)
+			sessionID, quit, err := pickSession(ctx, store, reader, displayModel)
 			if err != nil {
 				return fmt.Errorf("session selection: %w", err)
+			}
+			if quit {
+				return nil
 			}
 
 			brain := llm.NewSocraticBrain(llmClient)
@@ -156,7 +163,18 @@ var startCmd = &cobra.Command{
 			}
 
 			if len(messages) == 0 {
-				fmt.Fprintf(os.Stderr, "Session %d has no messages. Delete it? [y/N]: ", sessionID)
+				var sb strings.Builder
+				sb.WriteString(renderLogoForPicker())
+				sb.WriteString("\n\n")
+				sb.WriteString(pickerHeader + "\n\n")
+				sb.WriteString(fmt.Sprintf("Session %d has no messages.", sessionID) + "\n")
+				sb.WriteString("Delete it? [y/N]")
+
+				fmt.Fprintln(os.Stderr)
+				bw := boxWidth
+				fmt.Fprintln(os.Stderr, pickerBox.Copy().Width(bw).Render(sb.String()))
+				printBorderedPrompt(bw)
+
 				resp, _ := reader.ReadString('\n')
 				if strings.ToLower(strings.TrimSpace(resp)) == "y" {
 					if err := store.DeleteSession(ctx, sessionID); err != nil {
@@ -174,6 +192,8 @@ var startCmd = &cobra.Command{
 			}
 			brain.LoadHistory(history)
 
+			store.TouchSession(ctx, sessionID)
+
 			var recapSummary string
 			renderStatusOverlay(fmt.Sprintf("Looking up conversation %d...", sessionID))
 			summary, recapErr := brain.Recap(ctx)
@@ -182,6 +202,9 @@ var startCmd = &cobra.Command{
 				recapSummary = fmt.Sprintf("(Unable to generate recap: %s)", recapErr)
 			} else if summary != "" {
 				recapSummary = summary
+				store.SaveMessage(ctx, sessionID, "assistant", summary)
+				history = append(history, llm.Message{Role: "assistant", Content: summary})
+				brain.LoadHistory(history)
 			}
 
 			if ctxFile := loadContextFile(); ctxFile != "" {
@@ -201,17 +224,19 @@ var startCmd = &cobra.Command{
 	},
 }
 
-func pickSession(ctx context.Context, store *db.SessionStore, reader *bufio.Reader) (int, error) {
+func pickSession(ctx context.Context, store *db.SessionStore, reader *bufio.Reader, model string) (int, bool, error) {
 	all, err := store.ListSessions(ctx)
 	if err != nil || len(all) == 0 {
 		if err == nil {
-			showWelcome()
+			showWelcome(model)
 		}
-		return 0, nil
+		return 0, false, nil
 	}
 
 	offset := 0
 	batchSize := 3
+	recentID := all[0].ID
+	var statusErr string
 
 	for {
 		end := offset + batchSize
@@ -222,18 +247,38 @@ func pickSession(ctx context.Context, store *db.SessionStore, reader *bufio.Read
 
 		var sb strings.Builder
 		sb.WriteString(renderLogoForPicker())
+		sb.WriteString("\n")
+		sb.WriteString(pickerStatusText.Render("Using model: " + model))
 		sb.WriteString("\n\n")
 		sb.WriteString(pickerHeader + "\n\n")
 		for _, s := range batch {
-			sb.WriteString(fmt.Sprintf("[%d]  %s  (%s)\n",
-				s.ID, s.Title, s.UpdatedAt.Format("Jan 2 15:04")))
+			prefix := ""
+			if s.ID == recentID {
+				prefix = "★ "
+			}
+			sb.WriteString(fmt.Sprintf("[%d]  %s%s  (%s)\n",
+				s.ID, prefix, s.Title, s.UpdatedAt.Format("Jan 2 15:04")))
 		}
 
+		hasPrev := offset > 0
 		hasMore := end < len(all)
-		if hasMore {
-			sb.WriteString("\n[m]  More sessions...\n")
+		if hasPrev || hasMore {
+			sb.WriteString("\n")
+			if hasPrev {
+				sb.WriteString("[b]  Back\n")
+			}
+			if hasMore {
+				sb.WriteString("[m]  More sessions...\n")
+			}
 		}
-		sb.WriteString("\n" + pickerHint)
+		sb.WriteString("[⏎]  Start new conversation\n")
+		sb.WriteString("[e]  Edit conversations\n")
+		sb.WriteString("[q]  Quit\n")
+
+		if statusErr != "" {
+			sb.WriteString("\n" + pickerError.Render("  " + statusErr) + "\n")
+			statusErr = ""
+		}
 
 	fmt.Fprintln(os.Stderr)
 	bw := boxWidth
@@ -242,12 +287,27 @@ func pickSession(ctx context.Context, store *db.SessionStore, reader *bufio.Read
 
 		input, err := reader.ReadString('\n')
 		if err != nil {
-			return 0, nil
+			return 0, false, nil
 		}
 		input = strings.TrimSpace(strings.ToLower(input))
 
 		if input == "" {
-			return 0, nil
+			return 0, false, nil
+		}
+
+		if input == "q" {
+			fmt.Fprint(os.Stderr, "\033[2J\033[H")
+			return 0, true, nil
+		}
+
+		if input == "e" {
+			editSessions(ctx, store, reader, model)
+			all, _ = store.ListSessions(ctx)
+			offset = 0
+			if len(all) > 0 {
+				recentID = all[0].ID
+			}
+			continue
 		}
 
 		if input == "m" && hasMore {
@@ -255,18 +315,28 @@ func pickSession(ctx context.Context, store *db.SessionStore, reader *bufio.Read
 			continue
 		}
 
+		if input == "b" && hasPrev {
+			offset -= batchSize
+			continue
+		}
+
 		id, err := strconv.Atoi(input)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "  Invalid choice. Type a number, 'm', or press Enter.\n")
+			statusErr = "Invalid input — type a session number."
 			continue
 		}
 
 		for _, s := range batch {
 			if s.ID == id {
-				return id, nil
+				return id, false, nil
 			}
 		}
-		fmt.Fprintf(os.Stderr, "  Session %d not in this list.\n", id)
+		for _, s := range all {
+			if s.ID == id {
+				return id, false, nil
+			}
+		}
+		statusErr = fmt.Sprintf("Session %d not found.", id)
 	}
 }
 
@@ -318,11 +388,160 @@ func clearStatusOverlay() {
 
 const boxWidth = 64
 
-func showWelcome() {
+func showWelcome(model string) {
 	bw := boxWidth
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, pickerBox.Copy().Width(bw).Render(renderLogoForPicker()+"\n\nStarting a new session..."))
+	content := renderLogoForPicker() + "\n" + pickerStatusText.Render("Using model: "+model) + "\n\nStarting a new session..."
+	fmt.Fprintln(os.Stderr, pickerBox.Copy().Width(bw).Render(content))
 	fmt.Fprintln(os.Stderr)
+}
+
+func editSessions(ctx context.Context, store *db.SessionStore, reader *bufio.Reader, model string) {
+	all, err := store.ListSessions(ctx)
+	if err != nil || len(all) == 0 {
+		return
+	}
+
+	const pageSize = 10
+	offset := 0
+
+	for {
+		end := offset + pageSize
+		if end > len(all) {
+			end = len(all)
+		}
+		page := all[offset:end]
+
+		var sb strings.Builder
+		sb.WriteString(renderLogoForPicker())
+		sb.WriteString("\n")
+		sb.WriteString(pickerStatusText.Render("Using model: " + model))
+		sb.WriteString("\n\n")
+		sb.WriteString(pickerHeader + " (editing)\n\n")
+		for _, s := range page {
+			sb.WriteString(fmt.Sprintf("[%d]  %s  (%s)\n",
+				s.ID, s.Title, s.UpdatedAt.Format("Jan 2 15:04")))
+		}
+
+		hasPrev := offset > 0
+		hasNext := offset+pageSize < len(all)
+		if hasPrev || hasNext {
+			sb.WriteString("\n")
+			if hasPrev {
+				sb.WriteString("[b]  Back\n")
+			}
+			if hasNext {
+				sb.WriteString("[n]  Next\n")
+			}
+		}
+		sb.WriteString("\n" + pickerStatusText.Render("Type a number to select, Enter to go back"))
+
+		fmt.Fprintln(os.Stderr)
+		bw := boxWidth
+		fmt.Fprintln(os.Stderr, pickerEditBox.Copy().Width(bw).Render(sb.String()))
+		printBorderedPrompt(bw)
+
+		input, err := reader.ReadString('\n')
+		if err != nil {
+			return
+		}
+		input = strings.TrimSpace(strings.ToLower(input))
+
+		if input == "" {
+			return
+		}
+		if input == "n" && hasNext {
+			offset += pageSize
+			continue
+		}
+		if input == "b" && hasPrev {
+			offset -= pageSize
+			continue
+		}
+
+		id, err := strconv.Atoi(input)
+		if err != nil {
+			continue
+		}
+
+		var session *db.Session
+		for i := range all {
+			if all[i].ID == id {
+				session = &all[i]
+				break
+			}
+		}
+		if session == nil {
+			continue
+		}
+
+		var subSb strings.Builder
+		subSb.WriteString(renderLogoForPicker())
+		subSb.WriteString("\n")
+		subSb.WriteString(pickerStatusText.Render("Using model: " + model))
+		subSb.WriteString("\n\n")
+		subSb.WriteString(pickerHeader + "\n\n")
+		subSb.WriteString(fmt.Sprintf("[%d]  %s  (%s)\n\n", session.ID, session.Title, session.UpdatedAt.Format("Jan 2 15:04")))
+		subSb.WriteString("[d]  Delete this conversation\n")
+		subSb.WriteString("[r]  Rename this conversation\n")
+		subSb.WriteString("\n" + pickerStatusText.Render("Type d or r, Enter to go back"))
+
+		fmt.Fprintln(os.Stderr)
+		fmt.Fprintln(os.Stderr, pickerEditBox.Copy().Width(bw).Render(subSb.String()))
+		printBorderedPrompt(bw)
+
+		sub, err := reader.ReadString('\n')
+		if err != nil {
+			return
+		}
+		sub = strings.TrimSpace(strings.ToLower(sub))
+
+		switch sub {
+		case "d":
+			var delSb strings.Builder
+			delSb.WriteString(renderLogoForPicker())
+			delSb.WriteString("\n")
+			delSb.WriteString(pickerStatusText.Render("Using model: " + model))
+			delSb.WriteString("\n\n")
+			delSb.WriteString(pickerHeader + "\n\n")
+			delSb.WriteString(fmt.Sprintf("Delete session %d: %s?\n\n", session.ID, session.Title))
+			delSb.WriteString(pickerError.Render("[y]  Yes, delete\n"))
+			delSb.WriteString(pickerStatusText.Render("Enter to cancel"))
+
+			fmt.Fprintln(os.Stderr)
+			fmt.Fprintln(os.Stderr, pickerEditBox.Copy().Width(bw).Render(delSb.String()))
+			printBorderedPrompt(bw)
+
+			confirm, _ := reader.ReadString('\n')
+			if strings.ToLower(strings.TrimSpace(confirm)) == "y" {
+				store.DeleteSession(ctx, session.ID)
+			}
+			all, _ = store.ListSessions(ctx)
+			if offset >= len(all) && offset > 0 {
+				offset = max(0, len(all)-pageSize)
+			}
+		case "r":
+			var renSb strings.Builder
+			renSb.WriteString(renderLogoForPicker())
+			renSb.WriteString("\n")
+			renSb.WriteString(pickerStatusText.Render("Using model: " + model))
+			renSb.WriteString("\n\n")
+			renSb.WriteString(pickerHeader + "\n\n")
+			renSb.WriteString(fmt.Sprintf("Rename session %d\nCurrent: %s\n\n", session.ID, session.Title))
+			renSb.WriteString(pickerStatusText.Render("Type new title, or Enter to cancel"))
+
+			fmt.Fprintln(os.Stderr)
+			fmt.Fprintln(os.Stderr, pickerEditBox.Copy().Width(bw).Render(renSb.String()))
+			printBorderedPrompt(bw)
+
+			title, _ := reader.ReadString('\n')
+			title = strings.TrimSpace(title)
+			if title != "" {
+				store.SetTitle(ctx, session.ID, title)
+			}
+			all, _ = store.ListSessions(ctx)
+		}
+	}
 }
 
 func renderLogoForPicker() string {

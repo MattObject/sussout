@@ -29,6 +29,7 @@ var resumeCmd = &cobra.Command{
 	Short: "Resume a past Socratic session",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
+		fmt.Fprint(os.Stderr, "\033[2J\033[H")
 		cfg := config.Load(resumePreset)
 
 		if cfg.DatabaseURL == "" {
@@ -58,16 +59,6 @@ var resumeCmd = &cobra.Command{
 
 		store := db.NewSessionStore(pool)
 		llmClient := llm.NewLMStudioClient(cfg.LLM)
-
-		displayModel := cfg.LLM.Model
-		if displayModel == "" {
-			detected, err := llmClient.Detect()
-			if err != nil {
-				return fmt.Errorf("model detection: %w", err)
-			}
-			displayModel = detected
-		}
-		fmt.Fprintf(os.Stderr, "\nUsing model: %s\n\n", displayModel)
 
 		brain := llm.NewSocraticBrain(llmClient)
 		extractor := llm.NewAssumptionExtractor(llmClient)

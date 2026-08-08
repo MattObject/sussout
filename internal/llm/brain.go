@@ -160,7 +160,7 @@ func (b *SocraticBrain) Recap(ctx context.Context) (string, error) {
 	}
 
 	msgs := []Message{
-		{Role: "system", Content: "You are resuming a previous Socratic conversation. Provide a 2-3 sentence summary of what was discussed and where it left off. Do not show your reasoning, thinking steps, or chain of thought. Output only the final summary."},
+		{Role: "system", Content: "You are resuming a previous Socratic conversation. Briefly summarize what was discussed, then ask the next question to continue the dialogue. Use a blank line between the summary and the question. Do not show your reasoning or chain of thought."},
 	}
 	msgs = append(msgs, b.history...)
 	msgs = append(msgs, Message{Role: "user", Content: "Summarize where we left off."})

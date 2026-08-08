@@ -68,6 +68,22 @@ func (s *SessionStore) DeleteSession(ctx context.Context, sessionID int) error {
 	return nil
 }
 
+func (s *SessionStore) SetTitle(ctx context.Context, sessionID int, title string) error {
+	_, err := s.pool.Exec(ctx, "UPDATE sessions SET title = $1, updated_at = NOW() WHERE id = $2", title, sessionID)
+	if err != nil {
+		return fmt.Errorf("set title: %w", err)
+	}
+	return nil
+}
+
+func (s *SessionStore) TouchSession(ctx context.Context, sessionID int) error {
+	_, err := s.pool.Exec(ctx, "UPDATE sessions SET updated_at = NOW() WHERE id = $1", sessionID)
+	if err != nil {
+		return fmt.Errorf("touch session: %w", err)
+	}
+	return nil
+}
+
 func (s *SessionStore) ClearMessages(ctx context.Context, sessionID int) error {
 	_, err := s.pool.Exec(ctx, "DELETE FROM messages WHERE session_id = $1", sessionID)
 	if err != nil {
@@ -87,7 +103,7 @@ func (s *SessionStore) ClearAssumptions(ctx context.Context, sessionID int) erro
 func (s *SessionStore) SaveMessage(ctx context.Context, sessionID int, role, content string) error {
 	_, err := s.pool.Exec(
 		ctx,
-		"INSERT INTO messages (session_id, role, content) VALUES ($1, $2, $3)",
+		"INSERT INTO messages (session_id, role, content) VALUES ($1, $2, $3); UPDATE sessions SET updated_at = NOW() WHERE id = $1",
 		sessionID, role, content,
 	)
 	if err != nil {
