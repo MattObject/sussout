@@ -103,9 +103,13 @@ func (s *SessionStore) ClearAssumptions(ctx context.Context, sessionID int) erro
 func (s *SessionStore) SaveMessage(ctx context.Context, sessionID int, role, content string) error {
 	_, err := s.pool.Exec(
 		ctx,
-		"INSERT INTO messages (session_id, role, content) VALUES ($1, $2, $3); UPDATE sessions SET updated_at = NOW() WHERE id = $1",
+		"INSERT INTO messages (session_id, role, content) VALUES ($1, $2, $3)",
 		sessionID, role, content,
 	)
+	if err != nil {
+		return fmt.Errorf("save message: %w", err)
+	}
+	_, err = s.pool.Exec(ctx, "UPDATE sessions SET updated_at = NOW() WHERE id = $1", sessionID)
 	if err != nil {
 		return fmt.Errorf("save message: %w", err)
 	}
