@@ -261,7 +261,7 @@ func NewTUI(brain *llm.SocraticBrain, store *db.SessionStore, extractor *llm.Ass
 		logoBuf.WriteString(styleLogoLine(line))
 		logoBuf.WriteRune('\n')
 	}
-	logoBuf.WriteString(logoSubStyle.Render("      Socratic stress-testing of ideas."))
+	logoBuf.WriteString(logoSubStyle.Render("Suss-out ideas."))
 	logoBuf.WriteString("\n\n")
 	t.logoPrefix = logoBuf.String()
 
