@@ -17,6 +17,7 @@ type Preset struct {
 
 type File struct {
 	DefaultPreset string            `yaml:"default_preset"`
+	DatabaseURL   string            `yaml:"database_url,omitempty"`
 	Presets       map[string]Preset `yaml:"presets"`
 }
 
@@ -110,8 +111,13 @@ func Load(presetName string) *Config {
 		apiKey = v
 	}
 
+	dbURL := os.Getenv("DATABASE_URL")
+	if dbURL == "" && f.DatabaseURL != "" {
+		dbURL = f.DatabaseURL
+	}
+
 	return &Config{
-		DatabaseURL: os.Getenv("DATABASE_URL"),
+		DatabaseURL: dbURL,
 		LLM: llm.ClientConfig{
 			BaseURL: baseURL,
 			Model:   model,
