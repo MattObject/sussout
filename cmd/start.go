@@ -29,12 +29,12 @@ var pickerEditBox = lipgloss.NewStyle().
 	Padding(0, 1)
 
 var pickerLogoLines = []string{
-	"●●●●●●●╗   ●●●●●●●╗",
-	"●●╔════╝   ●●╔══●●╗",
-	"●●●●●●●╗   ●●║  ●●║",
-	"╚════●●║   ●●║  ●●║",
-	"●●●●●●●║   ╚●●●●●●║",
-	"╚══════╝   ╚═════╝ ",
+	"●●●●●●●╗    ●●●●●●●╗",
+	"●●╔════╝ ●○ ●●╔══●●╗",
+	"●●●●●●●╗ ●○ ●●║  ●●║",
+	"╚════●●║ ●○ ●●║  ●●║",
+	"●●●●●●●║ ●○ ╚●●●●●●║",
+	"╚══════╝    ╚═════╝ ",
 }
 
 var pickerLogoFill = lipgloss.NewStyle().Foreground(lipgloss.Color("#E04040"))
@@ -326,7 +326,7 @@ func renderPickerLogo() string {
 			switch c {
 			case '●':
 				sb.WriteString(pickerLogoFill.Render(string(c)))
-			case '╭', '╮', '╰', '╯', '│', '─', '╗', '╔', '╝', '║', '╚', '═':
+			case '╭', '╮', '╰', '╯', '│', '─', '╗', '╔', '╝', '║', '╚', '═', '○':
 				sb.WriteString(pickerLogoOutline.Render(string(c)))
 			default:
 				sb.WriteRune(c)

@@ -158,12 +158,12 @@ var helpEntries = []helpEntry{
 }
 
 var logoSplash = []string{
-	"◉◉◉◉◉◉◉╗   ◉◉◉◉◉◉◉╗",
-	"◉◉╔════╝   ◉◉╔══◉◉╗",
-	"◉◉◉◉◉◉◉╗   ◉◉║  ◉◉║",
-	"╚════◉◉║   ◉◉║  ◉◉║",
-	"◉◉◉◉◉◉◉║   ╚◉◉◉◉◉◉║",
-	"╚══════╝   ╚═════╝ ",
+	"◉◉◉◉◉◉◉╗    ◉◉◉◉◉◉◉╗",
+	"◉◉╔════╝ ◉○ ◉◉╔══◉◉╗",
+	"◉◉◉◉◉◉◉╗ ◉○ ◉◉║  ◉◉║",
+	"╚════◉◉║ ◉○ ◉◉║  ◉◉║",
+	"◉◉◉◉◉◉◉║ ◉○ ╚◉◉◉◉◉◉║",
+	"╚══════╝    ╚═════╝ ",
 }
 
 type llmResponseMsg struct {
@@ -847,7 +847,7 @@ func styleLogoLine(line string) string {
 		switch c {
 		case '◉':
 			sb.WriteString(logoFillStyle.Render(string(c)))
-		case '╭', '╮', '╰', '╯', '│', '─', '╗', '╔', '╝', '║', '╚', '═':
+		case '╭', '╮', '╰', '╯', '│', '─', '╗', '╔', '╝', '║', '╚', '═', '○':
 			sb.WriteString(logoOutlineStyle.Render(string(c)))
 		default:
 			sb.WriteRune(c)
