@@ -31,10 +31,10 @@ var pickerEditBox = lipgloss.NewStyle().
 var pickerLogoLines = []string{
 	"●●●●●●●╗    ●●●●●●●╗",
 	"●●╔════╝    ●●╔══●●╗",
-	"●●●●●●●╗ ●● ●●║  ●●║",
-	"╚════●●║ ●○ ●●║  ●●║",
-	"●●●●●●●║    ╚●●●●●●║",
-	"╚══════╝    ╚═════╝ ",
+	"●●●●●●●╗    ●●║  ●●║",
+	"╚════●●║    ●●║  ●●║",
+	"●●●●●●●║ ●● ╚●●●●●●║",
+	"╚══════╝ ●○ ╚═════╝ ",
 }
 
 var pickerLogoFill = lipgloss.NewStyle().Foreground(lipgloss.Color("#E04040"))
