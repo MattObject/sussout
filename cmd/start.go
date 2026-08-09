@@ -459,6 +459,7 @@ func editSessions(ctx context.Context, store *db.SessionStore, model string) {
 				fmt.Fprint(os.Stderr, "\033[2J\033[H")
 				rawFprintln("")
 				rawFprintln(pickerEditBox.Copy().Width(boxWidth).Render(renSb.String()))
+				fmt.Fprint(os.Stderr, "\033[3A\r")
 
 				title := readLineRaw()
 				title = strings.TrimSpace(title)
