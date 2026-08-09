@@ -81,10 +81,6 @@ var startCmd = &cobra.Command{
 		fmt.Fprint(os.Stderr, "\033[2J\033[H")
 		cfg := config.Load(startPreset)
 
-		if cfg.DatabaseURL == "" {
-			return fmt.Errorf("DATABASE_URL environment variable is not set")
-		}
-
 		if startModel != "" {
 			cfg.LLM.Model = startModel
 		}
@@ -102,13 +98,13 @@ var startCmd = &cobra.Command{
 			cancel()
 		}()
 
-		pool, err := db.NewPool(ctx, cfg.DatabaseURL)
+		conn, driver, err := db.Open(ctx, cfg.DatabaseURL)
 		if err != nil {
 			return fmt.Errorf("database connection: %w", err)
 		}
-		defer pool.Close()
+		defer conn.Close()
 
-		store := db.NewSessionStore(pool)
+		store := db.NewSessionStore(conn, driver)
 
 		llmClient := llm.NewLMStudioClient(cfg.LLM)
 

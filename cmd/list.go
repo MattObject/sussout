@@ -19,19 +19,15 @@ var listCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		cfg := config.Load("")
 
-		if cfg.DatabaseURL == "" {
-			return fmt.Errorf("DATABASE_URL environment variable is not set")
-		}
-
 		ctx := context.Background()
 
-		pool, err := db.NewPool(ctx, cfg.DatabaseURL)
+		conn, driver, err := db.Open(ctx, cfg.DatabaseURL)
 		if err != nil {
 			return fmt.Errorf("database connection: %w", err)
 		}
-		defer pool.Close()
+		defer conn.Close()
 
-		store := db.NewSessionStore(pool)
+		store := db.NewSessionStore(conn, driver)
 		sessions, err := store.ListSessions(ctx)
 		if err != nil {
 			return fmt.Errorf("list sessions: %w", err)

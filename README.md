@@ -6,11 +6,12 @@ A local-first CLI application for Socratic stress-testing of ideas. Connects to 
 
 Sussout acts as a critical collaborator. You bring an idea — a project, a design choice, a research question — and it asks probing questions to expose hidden assumptions, structural gaps, and contradictions. The dialogue is stateful: Sussout tracks your position across turns and flags when your thinking drifts or stalls.
 
-Sessions are stored locally in PostgreSQL. You can resume past conversations, export them to Markdown, and switch models or servers mid-session. Everything runs on your hardware against your own LLM.
+Sessions are stored locally in SQLite (`~/.sussout/sussout.db`). You can resume past conversations, export them to Markdown, and switch models or servers mid-session. Everything runs on your hardware against your own LLM.
 
 ## Features
 
-- **Local-first** — all data stored in your own PostgreSQL database
+- **Zero-config** — embedded SQLite, no Docker or database server needed
+- **PostgreSQL optional** — set `DATABASE_URL` to a PostgreSQL connection string to use it instead
 - **Any OpenAI-compatible server** — LM Studio, Ollama, omlx, vLLM, and remote APIs all work
 - **Interactive TUI** — terminal-native interface with scrolling, color, and panels
 - **Session management** — resume past sessions with auto-generated recaps
@@ -21,7 +22,6 @@ Sessions are stored locally in PostgreSQL. You can resume past conversations, ex
 ## Prerequisites
 
 - Go 1.22+
-- Docker (for local PostgreSQL) or an existing PostgreSQL instance
 - An OpenAI-compatible LLM server running somewhere (LM Studio, Ollama, omlx, etc.)
 
 ## Install
@@ -29,32 +29,14 @@ Sessions are stored locally in PostgreSQL. You can resume past conversations, ex
 ```bash
 git clone https://github.com/MattObject/sussout.git
 cd sussout
-make setup    # starts Docker Postgres, installs binary to $GOPATH/bin
+make setup    # installs binary to $GOPATH/bin
 ```
 
-Or step by step:
-
-```bash
-go install .                      # installs sussout to $GOPATH/bin
-sussout config db "postgresql://user:pass@localhost:5432/sussout?sslmode=disable"
-sussout config add my-llm        # add a preset for your LLM server
-sussout start                    # start a session
-```
-
-Database setup with Docker:
-
-```bash
-make db-up        # start PostgreSQL on localhost:5432
-make db-down      # stop it
-make db-reset     # wipe and restart
-```
+No database setup required — SQLite is embedded and creates `~/.sussout/sussout.db` automatically on first run.
 
 ## Quick Start
 
 ```bash
-# Set the database URL (stored in ~/.sussout.yaml)
-sussout config db "postgresql://sussout_user:password123@localhost:5432/sussout?sslmode=disable"
-
 # Add a preset for your LLM server
 sussout config add my-server
 
@@ -62,7 +44,17 @@ sussout config add my-server
 sussout start
 ```
 
-The database URL can also be set via the `DATABASE_URL` environment variable or a `.env` file in the working directory. The fallback order is: env var → `.env` file → `~/.sussout.yaml`.
+### Using PostgreSQL instead
+
+```bash
+# Set a PostgreSQL connection string (replaces SQLite)
+sussout config db "postgresql://user:pass@localhost:5432/sussout?sslmode=disable"
+
+# Or via environment variable
+export DATABASE_URL="postgresql://user:pass@localhost:5432/sussout?sslmode=disable"
+```
+
+The fallback order is: `DATABASE_URL` env var → `.env` file → `~/.sussout.yaml` → embedded SQLite.
 
 ## Commands
 

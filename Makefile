@@ -53,21 +53,15 @@ db-migrate:
 	@psql "$$DATABASE_URL" -f db/schema.sql
 
 setup: install
+	@echo ""
+	@echo "Setup complete. SQLite is the default database (no config needed)."
+	@echo ""
 ifdef HAS_DOCKER
-	@echo ""
-	@echo "Starting Docker PostgreSQL..."
-	@docker compose up -d --wait 2>/dev/null && echo "  Database ready at $(DOCKER_DB)" || true
-endif
-	@echo ""
-	@echo "Setup complete."
-	@echo ""
-	@echo "Configure your database URL:"
-	@echo "  sussout config db <postgresql://user:pass@host:5432/dbname>"
-ifdef HAS_DOCKER
-	@echo "  Or for the local Docker instance:"
+	@echo "For PostgreSQL (optional):"
+	@echo "  make db-up    # start Docker Postgres"
 	@echo "  sussout config db \"$(DOCKER_DB)\""
-endif
 	@echo ""
-	@echo "Then add an LLM server and start:"
+endif
+	@echo "Add an LLM server and start:"
 	@echo "  sussout config add my-server"
 	@echo "  sussout start"
