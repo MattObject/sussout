@@ -19,7 +19,7 @@ func Open(ctx context.Context, connString string) (*sql.DB, string, error) {
 		home, _ := os.UserHomeDir()
 		dir := filepath.Join(home, ".sussout")
 		os.MkdirAll(dir, 0755)
-		dsn = filepath.Join(dir, "sussout.db")
+		dsn = filepath.Join(dir, "sussout.db") + "?_loc=auto"
 		driver = "sqlite"
 	} else if strings.HasPrefix(connString, "postgres://") || strings.HasPrefix(connString, "postgresql://") {
 		dsn = connString
@@ -33,7 +33,11 @@ func Open(ctx context.Context, connString string) (*sql.DB, string, error) {
 		}
 		driver = "postgres"
 	} else {
-		dsn = connString
+		sep := "?"
+		if strings.Contains(connString, "?") {
+			sep = "&"
+		}
+		dsn = connString + sep + "_loc=auto"
 		driver = "sqlite"
 	}
 
@@ -66,7 +70,7 @@ func migrate(ctx context.Context, db *sql.DB, driver string) error {
 	timestamp := "TIMESTAMP WITH TIME ZONE"
 	if !pg {
 		serial = "INTEGER"
-		timestamp = "TEXT"
+		timestamp = "DATETIME"
 	}
 
 	tables := []string{
@@ -107,7 +111,45 @@ func migrate(ctx context.Context, db *sql.DB, driver string) error {
 		}
 	}
 
+	if !pg {
+		if err := fixSQLiteColumnTypes(ctx, db); err != nil {
+			return fmt.Errorf("fix column types: %w", err)
+		}
+	}
+
 	return nil
+}
+
+func fixSQLiteColumnTypes(ctx context.Context, db *sql.DB) error {
+	tables := []string{"sessions", "messages", "assumptions", "decisions"}
+	for _, table := range tables {
+		var colType string
+		err := db.QueryRowContext(ctx,
+			`SELECT type FROM pragma_table_info(?) WHERE name = 'created_at'`, table,
+		).Scan(&colType)
+		if err != nil {
+			continue
+		}
+		if colType == "TEXT" {
+			recreateSQLiteTable(ctx, db, table)
+		}
+	}
+	return nil
+}
+
+func recreateSQLiteTable(ctx context.Context, db *sql.DB, table string) {
+	var sql string
+	db.QueryRowContext(ctx, `SELECT sql FROM sqlite_master WHERE type='table' AND name=?`, table).Scan(&sql)
+	sql = strings.ReplaceAll(sql, "TEXT DEFAULT CURRENT_TIMESTAMP", "DATETIME DEFAULT CURRENT_TIMESTAMP")
+	sql = strings.ReplaceAll(sql, " TEXT ,", " DATETIME,")
+
+	db.ExecContext(ctx, "PRAGMA foreign_keys = OFF")
+	db.ExecContext(ctx, fmt.Sprintf("CREATE TABLE %s_new AS SELECT * FROM %s", table, table))
+	db.ExecContext(ctx, fmt.Sprintf("DROP TABLE %s", table))
+	db.ExecContext(ctx, sql)
+	db.ExecContext(ctx, fmt.Sprintf("INSERT INTO %s SELECT * FROM %s_new", table, table))
+	db.ExecContext(ctx, fmt.Sprintf("DROP TABLE %s_new", table))
+	db.ExecContext(ctx, "PRAGMA foreign_keys = ON")
 }
 
 func autoinc(sqlite bool) string {
