@@ -134,6 +134,7 @@ var validCommands = map[string]bool{
 	"/model": true, "/write": true, "/export": true, "/quit": true,
 	"/close": true, "/delete": true, "/title": true,
 	"/assumptions": true, "/about": true, "/save": true,
+	"/db": true,
 }
 
 type helpEntry struct {
@@ -154,6 +155,7 @@ var helpEntries = []helpEntry{
 	{"/write", "/write [file] [instructions]", "Export session to a Markdown file", true, "File path [instructions]..."},
 	{"/save", "/save", "Show save status", false, ""},
 	{"/about", "/about", "Show version and model info", false, ""},
+	{"/db", "/db", "Show current database info", false, ""},
 	{"/quit", "/quit", "Exit the application", false, ""},
 }
 
@@ -555,6 +557,18 @@ case tea.KeyMsg:
 			if input == "/save" {
 				t.textarea.Reset()
 				t.statusSuccess = "All progress is saved automatically."
+				return t, nil
+			}
+
+			if input == "/db" {
+				t.textarea.Reset()
+				driver := t.store.Driver()
+				if driver == "sqlite" {
+					t.statusSuccess = "Database: SQLite (~/.sussout/sussout.db)"
+				} else {
+					cfg := config.Load("")
+					t.statusSuccess = fmt.Sprintf("Database: PostgreSQL (%s)", cfg.DatabaseURL)
+				}
 				return t, nil
 			}
 
@@ -966,6 +980,15 @@ func (t *TUI) doHelpCommand(idx int) tea.Cmd {
 		return nil
 	case "/save":
 		t.statusSuccess = "All progress is saved automatically."
+		return nil
+	case "/db":
+		driver := t.store.Driver()
+		if driver == "sqlite" {
+			t.statusSuccess = "Database: SQLite (~/.sussout/sussout.db)"
+		} else {
+			cfg := config.Load("")
+			t.statusSuccess = fmt.Sprintf("Database: PostgreSQL (%s)", cfg.DatabaseURL)
+		}
 		return nil
 	case "/about":
 		t.showAbout = true

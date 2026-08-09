@@ -68,6 +68,10 @@ func (s *SessionStore) queryRow(ctx context.Context, query string, args ...any) 
 	return s.db.QueryRowContext(ctx, s.rebind(query), args...)
 }
 
+func (s *SessionStore) Driver() string {
+	return s.driver
+}
+
 func (s *SessionStore) CreateSession(ctx context.Context, title string) (*Session, error) {
 	var session Session
 	err := s.queryRow(
