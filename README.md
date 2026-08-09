@@ -82,7 +82,7 @@ All settings are stored in `~/.sussout.yaml`.
 ```bash
 sussout config              # Show active settings and presets
 sussout config list         # List all presets with details
-sussout config add <name>   # Add a new preset interactively
+sussout config add <name> [url]  # Add a preset, optionally with URL
 sussout config use <name>   # Switch default preset
 sussout config remove <name># Remove a preset
 sussout config db <url>    # Set the database URL

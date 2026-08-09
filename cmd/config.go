@@ -90,11 +90,15 @@ var configUseCmd = &cobra.Command{
 }
 
 var configAddCmd = &cobra.Command{
-	Use:   "add <name>",
-	Short: "Add a new preset interactively",
-	Args:  cobra.ExactArgs(1),
+	Use:   "add <name> [url]",
+	Short: "Add a new preset, optionally providing the URL",
+	Args:  cobra.RangeArgs(1, 2),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		name := args[0]
+		if strings.HasPrefix(name, "http://") || strings.HasPrefix(name, "https://") {
+			return fmt.Errorf("first argument is the preset name, not a URL.\nUsage: sussout config add <name> [url]\nExample: sussout config add my-server http://192.168.1.187:1234/v1")
+		}
+
 		f, err := config.LoadFile()
 		if err != nil {
 			return err
@@ -109,10 +113,15 @@ var configAddCmd = &cobra.Command{
 		}
 
 		reader := bufio.NewReader(os.Stdin)
+		var baseURL string
 
-		fmt.Print("Base URL: ")
-		baseURL, _ := reader.ReadString('\n')
-		baseURL = strings.TrimSpace(baseURL)
+		if len(args) == 2 {
+			baseURL = args[1]
+		} else {
+			fmt.Print("Base URL: ")
+			baseURL, _ = reader.ReadString('\n')
+			baseURL = strings.TrimSpace(baseURL)
+		}
 
 		fmt.Print("Model (press Enter for auto-detect): ")
 		model, _ := reader.ReadString('\n')
