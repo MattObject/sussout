@@ -1,28 +1,40 @@
-.PHONY: build install run clean dev test vet db-up db-down db-reset db-setup setup
+.PHONY: build install run clean dev test vet db-up db-down db-reset db-setup setup _ensure-go
 
 BINARY    = sussout
 DOCKER_DB = postgresql://sussout_user:password123@localhost:5432/sussout?sslmode=disable
 HAS_DOCKER := $(shell command -v docker 2>/dev/null)
 
-build:
+_ensure-go:
+	@command -v go >/dev/null 2>&1 || { \
+		echo "Go is not installed."; \
+		if command -v brew >/dev/null 2>&1; then \
+			echo "Installing Go via Homebrew..."; \
+			brew install go; \
+		else \
+			echo "Please install Go: https://go.dev/dl/"; \
+			exit 1; \
+		fi; \
+	}
+
+build: _ensure-go
 	go build -o $(BINARY) .
 
-install:
+install: _ensure-go
 	go install .
 
 run: build
 	./$(BINARY) $(ARGS)
 
-dev:
+dev: _ensure-go
 	go run . $(ARGS)
 
-clean:
+clean: _ensure-go
 	rm -f $(BINARY)
 
-test:
+test: _ensure-go
 	go test ./...
 
-vet:
+vet: _ensure-go
 	go vet ./...
 
 db-up:
