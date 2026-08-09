@@ -453,7 +453,7 @@ func editSessions(ctx context.Context, store *db.SessionStore, model string) {
 				renSb.WriteString(pickerStatusText.Render("Using model: " + model))
 				renSb.WriteString("\n\n")
 				renSb.WriteString(pickerHeader + "\n\n")
-				renSb.WriteString(fmt.Sprintf("Rename session %d\nCurrent: %s\n\n  New name:\n", session.ID, session.Title))
+				renSb.WriteString(fmt.Sprintf("Rename session %d\nCurrent: %s\n\n  New name:", session.ID, session.Title))
 
 				fmt.Fprint(os.Stderr, "\033[2J\033[H")
 				rawFprintln("")
