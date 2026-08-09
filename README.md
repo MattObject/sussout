@@ -15,36 +15,54 @@ Sessions are stored locally in PostgreSQL. You can resume past conversations, ex
 - **Interactive TUI** — terminal-native interface with scrolling, color, and panels
 - **Session management** — resume past sessions with auto-generated recaps
 - **Model switching** — change servers and models mid-session from a picker panel
-- **Persistent config** — server and model choices saved to `~/.sussout.yaml` across launches
+- **Persistent config** — server, model, and database URL saved to `~/.sussout.yaml` across launches
 - **Export** — generate Markdown summaries with `/write`
 
 ## Prerequisites
 
 - Go 1.22+
-- PostgreSQL
-- An OpenAI-compatible LLM server running somewhere
+- Docker (for local PostgreSQL) or an existing PostgreSQL instance
+- An OpenAI-compatible LLM server running somewhere (LM Studio, Ollama, omlx, etc.)
 
 ## Install
 
 ```bash
 git clone https://github.com/MattObject/sussout.git
 cd sussout
-go build -o sussout .
+make setup    # starts Docker Postgres, installs binary to $GOPATH/bin
+```
+
+Or step by step:
+
+```bash
+go install .                      # installs sussout to $GOPATH/bin
+sussout config db "postgresql://user:pass@localhost:5432/sussout?sslmode=disable"
+sussout config add my-llm        # add a preset for your LLM server
+sussout start                    # start a session
+```
+
+Database setup with Docker:
+
+```bash
+make db-up        # start PostgreSQL on localhost:5432
+make db-down      # stop it
+make db-reset     # wipe and restart
 ```
 
 ## Quick Start
 
 ```bash
-# Set up the database
-export DATABASE_URL="postgres://user:pass@localhost:5432/sussout"
-psql $DATABASE_URL -f db/schema.sql
+# Set the database URL (stored in ~/.sussout.yaml)
+sussout config db "postgresql://sussout_user:password123@localhost:5432/sussout?sslmode=disable"
 
 # Add a preset for your LLM server
-./sussout config add
+sussout config add my-server
 
 # Start a session
-./sussout start
+sussout start
 ```
+
+The database URL can also be set via the `DATABASE_URL` environment variable or a `.env` file in the working directory. The fallback order is: env var → `.env` file → `~/.sussout.yaml`.
 
 ## Commands
 
@@ -60,20 +78,23 @@ psql $DATABASE_URL -f db/schema.sql
 ## Session Management
 
 ```bash
-./sussout start           # New session or pick from recent ones
-./sussout resume <id>     # Resume a specific session by ID
-./sussout list            # List all past sessions
+sussout start              # New session or pick from recent ones
+sussout resume <id>        # Resume a specific session by ID
+sussout list               # List all past sessions
 ```
 
 ## Config
 
-Presets are stored in `~/.sussout.yaml`. Each preset defines a server URL, an optional model, and an optional API key.
+All settings are stored in `~/.sussout.yaml`.
 
 ```bash
-./sussout config list     # Show all presets
-./sussout config add      # Add a new preset
-./sussout config use      # Switch default preset
-./sussout config remove   # Remove a preset
+sussout config              # Show active settings and presets
+sussout config list         # List all presets with details
+sussout config add <name>   # Add a new preset interactively
+sussout config use <name>   # Switch default preset
+sussout config remove <name># Remove a preset
+sussout config db <url>    # Set the database URL
+sussout config db           # Show current database URL and source
 ```
 
 Environment variables (`LLM_STUDIO_URL`, `LLM_MODEL`, `LLM_API_KEY`) override preset values at runtime.
@@ -88,3 +109,14 @@ The system prompt enforces 16 rules across several domains:
 - **Termination** — suggests pivoting when thinking stalls, not just "this idea is bad"
 - **Evidence** — asks what backs research claims without pretending to verify sources
 - **Under-interpretation** — doesn't hallucinate context from fragments; asks for clarification
+
+## Development
+
+```bash
+make build       # compile binary
+make dev         # go run . (no build step)
+make run ARGS="start"  # build and run with args
+make test        # run tests
+make vet         # static analysis
+make clean       # remove binary
+```
