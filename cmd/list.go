@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/matt/sussout/internal/config"
 	"github.com/matt/sussout/internal/db"
 	"github.com/spf13/cobra"
 )
@@ -17,17 +16,15 @@ var listCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List all past Socratic sessions",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		cfg := config.Load("")
-
 		ctx := context.Background()
 
-		conn, driver, err := db.Open(ctx, cfg.DatabaseURL)
+		conn, err := db.Open(ctx)
 		if err != nil {
 			return fmt.Errorf("database connection: %w", err)
 		}
 		defer conn.Close()
 
-		store := db.NewSessionStore(conn, driver)
+		store := db.NewSessionStore(conn)
 		sessions, err := store.ListSessions(ctx)
 		if err != nil {
 			return fmt.Errorf("list sessions: %w", err)

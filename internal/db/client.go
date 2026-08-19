@@ -8,101 +8,64 @@ import (
 	"path/filepath"
 	"strings"
 
-	_ "github.com/lib/pq"
 	_ "modernc.org/sqlite"
 )
 
-func Open(ctx context.Context, connString string) (*sql.DB, string, error) {
-	var driver, dsn string
+func Open(ctx context.Context) (*sql.DB, error) {
+	home, _ := os.UserHomeDir()
+	dir := filepath.Join(home, ".sussout")
+	os.MkdirAll(dir, 0755)
+	dsn := filepath.Join(dir, "sussout.db") + "?_loc=auto"
 
-	if connString == "" {
-		home, _ := os.UserHomeDir()
-		dir := filepath.Join(home, ".sussout")
-		os.MkdirAll(dir, 0755)
-		dsn = filepath.Join(dir, "sussout.db") + "?_loc=auto"
-		driver = "sqlite"
-	} else if strings.HasPrefix(connString, "postgres://") || strings.HasPrefix(connString, "postgresql://") {
-		dsn = connString
-		if !strings.Contains(dsn, "sslmode=") {
-			if strings.Contains(dsn, "?") {
-				dsn += "&"
-			} else {
-				dsn += "?"
-			}
-			dsn += "sslmode=disable"
-		}
-		driver = "postgres"
-	} else {
-		sep := "?"
-		if strings.Contains(connString, "?") {
-			sep = "&"
-		}
-		dsn = connString + sep + "_loc=auto"
-		driver = "sqlite"
-	}
-
-	db, err := sql.Open(driver, dsn)
+	db, err := sql.Open("sqlite", dsn)
 	if err != nil {
-		return nil, "", fmt.Errorf("failed to open database: %w", err)
+		return nil, fmt.Errorf("failed to open database: %w", err)
 	}
 
 	if err := db.PingContext(ctx); err != nil {
 		db.Close()
-		return nil, "", fmt.Errorf("failed to ping database: %w", err)
+		return nil, fmt.Errorf("failed to ping database: %w", err)
 	}
 
-	if driver == "sqlite" {
-		db.ExecContext(ctx, "PRAGMA journal_mode = WAL")
-		db.ExecContext(ctx, "PRAGMA foreign_keys = ON")
-	}
+	db.ExecContext(ctx, "PRAGMA journal_mode = WAL")
+	db.ExecContext(ctx, "PRAGMA foreign_keys = ON")
 
-	if err := migrate(ctx, db, driver); err != nil {
+	if err := migrate(ctx, db); err != nil {
 		db.Close()
-		return nil, "", fmt.Errorf("migration failed: %w", err)
+		return nil, fmt.Errorf("migration failed: %w", err)
 	}
 
-	return db, driver, nil
+	return db, nil
 }
 
-func migrate(ctx context.Context, db *sql.DB, driver string) error {
-	pg := driver == "postgres"
-	serial := "SERIAL"
-	timestamp := "TIMESTAMP WITH TIME ZONE"
-	if !pg {
-		serial = "INTEGER"
-		timestamp = "DATETIME"
-	}
-
+func migrate(ctx context.Context, db *sql.DB) error {
 	tables := []string{
-		fmt.Sprintf(`CREATE TABLE IF NOT EXISTS sessions (
-			id %s PRIMARY KEY %s,
+		`CREATE TABLE IF NOT EXISTS sessions (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
 			title TEXT,
-			created_at %s DEFAULT CURRENT_TIMESTAMP,
-			updated_at %s DEFAULT CURRENT_TIMESTAMP
-		)`, serial, autoinc(!pg), timestamp, timestamp),
-
-		fmt.Sprintf(`CREATE TABLE IF NOT EXISTS messages (
-			id %s PRIMARY KEY %s,
+			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+			updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+		)`,
+		`CREATE TABLE IF NOT EXISTS messages (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
 			session_id INTEGER REFERENCES sessions(id) ON DELETE CASCADE,
 			role TEXT NOT NULL,
 			content TEXT NOT NULL,
-			created_at %s DEFAULT CURRENT_TIMESTAMP
-		)`, serial, autoinc(!pg), timestamp),
-
-		fmt.Sprintf(`CREATE TABLE IF NOT EXISTS assumptions (
-			id %s PRIMARY KEY %s,
+			created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+		)`,
+		`CREATE TABLE IF NOT EXISTS assumptions (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
 			session_id INTEGER REFERENCES sessions(id) ON DELETE CASCADE,
 			content TEXT NOT NULL,
 			status TEXT DEFAULT 'identified',
-			created_at %s DEFAULT CURRENT_TIMESTAMP
-		)`, serial, autoinc(!pg), timestamp),
-
-		fmt.Sprintf(`CREATE TABLE IF NOT EXISTS decisions (
-			id %s PRIMARY KEY %s,
+			created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+		)`,
+		`CREATE TABLE IF NOT EXISTS decisions (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
 			session_id INTEGER REFERENCES sessions(id) ON DELETE CASCADE,
 			content TEXT NOT NULL,
-			created_at %s DEFAULT CURRENT_TIMESTAMP
-		)`, serial, autoinc(!pg), timestamp),
+			created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+		)`,
 	}
 
 	for _, ddl := range tables {
@@ -111,10 +74,8 @@ func migrate(ctx context.Context, db *sql.DB, driver string) error {
 		}
 	}
 
-	if !pg {
-		if err := fixSQLiteColumnTypes(ctx, db); err != nil {
-			return fmt.Errorf("fix column types: %w", err)
-		}
+	if err := fixSQLiteColumnTypes(ctx, db); err != nil {
+		return fmt.Errorf("fix column types: %w", err)
 	}
 
 	return nil
@@ -150,11 +111,4 @@ func recreateSQLiteTable(ctx context.Context, db *sql.DB, table string) {
 	db.ExecContext(ctx, fmt.Sprintf("INSERT INTO %s SELECT * FROM %s_new", table, table))
 	db.ExecContext(ctx, fmt.Sprintf("DROP TABLE %s_new", table))
 	db.ExecContext(ctx, "PRAGMA foreign_keys = ON")
-}
-
-func autoinc(sqlite bool) string {
-	if sqlite {
-		return "AUTOINCREMENT"
-	}
-	return ""
 }

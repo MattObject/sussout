@@ -4,11 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"regexp"
 	"time"
 )
-
-var reDollar = regexp.MustCompile(`\$\d+`)
 
 type Session struct {
 	ID        int       `json:"id"`
@@ -41,42 +38,18 @@ type Decision struct {
 }
 
 type SessionStore struct {
-	db     *sql.DB
-	driver string
+	db *sql.DB
 }
 
-func NewSessionStore(db *sql.DB, driver string) *SessionStore {
-	return &SessionStore{db: db, driver: driver}
-}
-
-func (s *SessionStore) rebind(query string) string {
-	if s.driver == "postgres" {
-		return query
-	}
-	return reDollar.ReplaceAllString(query, "?")
-}
-
-func (s *SessionStore) exec(ctx context.Context, query string, args ...any) (sql.Result, error) {
-	return s.db.ExecContext(ctx, s.rebind(query), args...)
-}
-
-func (s *SessionStore) query(ctx context.Context, query string, args ...any) (*sql.Rows, error) {
-	return s.db.QueryContext(ctx, s.rebind(query), args...)
-}
-
-func (s *SessionStore) queryRow(ctx context.Context, query string, args ...any) *sql.Row {
-	return s.db.QueryRowContext(ctx, s.rebind(query), args...)
-}
-
-func (s *SessionStore) Driver() string {
-	return s.driver
+func NewSessionStore(db *sql.DB) *SessionStore {
+	return &SessionStore{db: db}
 }
 
 func (s *SessionStore) CreateSession(ctx context.Context, title string) (*Session, error) {
 	var session Session
-	err := s.queryRow(
+	err := s.db.QueryRowContext(
 		ctx,
-		"INSERT INTO sessions (title) VALUES ($1) RETURNING id, title, created_at, updated_at",
+		"INSERT INTO sessions (title) VALUES (?) RETURNING id, title, created_at, updated_at",
 		title,
 	).Scan(&session.ID, &session.Title, &session.CreatedAt, &session.UpdatedAt)
 	if err != nil {
@@ -86,7 +59,7 @@ func (s *SessionStore) CreateSession(ctx context.Context, title string) (*Sessio
 }
 
 func (s *SessionStore) DeleteSession(ctx context.Context, sessionID int) error {
-	_, err := s.exec(ctx, "DELETE FROM sessions WHERE id = $1", sessionID)
+	_, err := s.db.ExecContext(ctx, "DELETE FROM sessions WHERE id = ?", sessionID)
 	if err != nil {
 		return fmt.Errorf("delete session: %w", err)
 	}
@@ -94,7 +67,7 @@ func (s *SessionStore) DeleteSession(ctx context.Context, sessionID int) error {
 }
 
 func (s *SessionStore) SetTitle(ctx context.Context, sessionID int, title string) error {
-	_, err := s.exec(ctx, "UPDATE sessions SET title = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2", title, sessionID)
+	_, err := s.db.ExecContext(ctx, "UPDATE sessions SET title = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?", title, sessionID)
 	if err != nil {
 		return fmt.Errorf("set title: %w", err)
 	}
@@ -102,7 +75,7 @@ func (s *SessionStore) SetTitle(ctx context.Context, sessionID int, title string
 }
 
 func (s *SessionStore) TouchSession(ctx context.Context, sessionID int) error {
-	_, err := s.exec(ctx, "UPDATE sessions SET updated_at = CURRENT_TIMESTAMP WHERE id = $1", sessionID)
+	_, err := s.db.ExecContext(ctx, "UPDATE sessions SET updated_at = CURRENT_TIMESTAMP WHERE id = ?", sessionID)
 	if err != nil {
 		return fmt.Errorf("touch session: %w", err)
 	}
@@ -110,7 +83,7 @@ func (s *SessionStore) TouchSession(ctx context.Context, sessionID int) error {
 }
 
 func (s *SessionStore) ClearMessages(ctx context.Context, sessionID int) error {
-	_, err := s.exec(ctx, "DELETE FROM messages WHERE session_id = $1", sessionID)
+	_, err := s.db.ExecContext(ctx, "DELETE FROM messages WHERE session_id = ?", sessionID)
 	if err != nil {
 		return fmt.Errorf("clear messages: %w", err)
 	}
@@ -118,7 +91,7 @@ func (s *SessionStore) ClearMessages(ctx context.Context, sessionID int) error {
 }
 
 func (s *SessionStore) ClearAssumptions(ctx context.Context, sessionID int) error {
-	_, err := s.exec(ctx, "DELETE FROM assumptions WHERE session_id = $1", sessionID)
+	_, err := s.db.ExecContext(ctx, "DELETE FROM assumptions WHERE session_id = ?", sessionID)
 	if err != nil {
 		return fmt.Errorf("clear assumptions: %w", err)
 	}
@@ -126,15 +99,15 @@ func (s *SessionStore) ClearAssumptions(ctx context.Context, sessionID int) erro
 }
 
 func (s *SessionStore) SaveMessage(ctx context.Context, sessionID int, role, content string) error {
-	_, err := s.exec(
+	_, err := s.db.ExecContext(
 		ctx,
-		"INSERT INTO messages (session_id, role, content) VALUES ($1, $2, $3)",
+		"INSERT INTO messages (session_id, role, content) VALUES (?, ?, ?)",
 		sessionID, role, content,
 	)
 	if err != nil {
 		return fmt.Errorf("save message: %w", err)
 	}
-	_, err = s.exec(ctx, "UPDATE sessions SET updated_at = CURRENT_TIMESTAMP WHERE id = $1", sessionID)
+	_, err = s.db.ExecContext(ctx, "UPDATE sessions SET updated_at = CURRENT_TIMESTAMP WHERE id = ?", sessionID)
 	if err != nil {
 		return fmt.Errorf("save message: %w", err)
 	}
@@ -142,9 +115,9 @@ func (s *SessionStore) SaveMessage(ctx context.Context, sessionID int, role, con
 }
 
 func (s *SessionStore) GetMessages(ctx context.Context, sessionID int) ([]Message, error) {
-	rows, err := s.query(
+	rows, err := s.db.QueryContext(
 		ctx,
-		"SELECT id, session_id, role, content, created_at FROM messages WHERE session_id = $1 ORDER BY created_at ASC",
+		"SELECT id, session_id, role, content, created_at FROM messages WHERE session_id = ? ORDER BY created_at ASC",
 		sessionID,
 	)
 	if err != nil {
@@ -164,7 +137,7 @@ func (s *SessionStore) GetMessages(ctx context.Context, sessionID int) ([]Messag
 }
 
 func (s *SessionStore) ListSessions(ctx context.Context) ([]Session, error) {
-	rows, err := s.query(
+	rows, err := s.db.QueryContext(
 		ctx,
 		"SELECT id, title, created_at, updated_at FROM sessions ORDER BY updated_at DESC",
 	)
@@ -177,9 +150,9 @@ func (s *SessionStore) ListSessions(ctx context.Context) ([]Session, error) {
 }
 
 func (s *SessionStore) RecentSessions(ctx context.Context, limit int) ([]Session, error) {
-	rows, err := s.query(
+	rows, err := s.db.QueryContext(
 		ctx,
-		"SELECT id, title, created_at, updated_at FROM sessions ORDER BY updated_at DESC LIMIT $1",
+		"SELECT id, title, created_at, updated_at FROM sessions ORDER BY updated_at DESC LIMIT ?",
 		limit,
 	)
 	if err != nil {
@@ -203,9 +176,9 @@ func scanSessions(rows *sql.Rows) ([]Session, error) {
 }
 
 func (s *SessionStore) SaveAssumption(ctx context.Context, sessionID int, content string) error {
-	_, err := s.exec(
+	_, err := s.db.ExecContext(
 		ctx,
-		"INSERT INTO assumptions (session_id, content) VALUES ($1, $2)",
+		"INSERT INTO assumptions (session_id, content) VALUES (?, ?)",
 		sessionID, content,
 	)
 	if err != nil {
@@ -215,9 +188,9 @@ func (s *SessionStore) SaveAssumption(ctx context.Context, sessionID int, conten
 }
 
 func (s *SessionStore) GetAssumptions(ctx context.Context, sessionID int) ([]Assumption, error) {
-	rows, err := s.query(
+	rows, err := s.db.QueryContext(
 		ctx,
-		"SELECT id, session_id, content, status, created_at FROM assumptions WHERE session_id = $1 ORDER BY created_at ASC",
+		"SELECT id, session_id, content, status, created_at FROM assumptions WHERE session_id = ? ORDER BY created_at ASC",
 		sessionID,
 	)
 	if err != nil {
@@ -237,9 +210,9 @@ func (s *SessionStore) GetAssumptions(ctx context.Context, sessionID int) ([]Ass
 }
 
 func (s *SessionStore) SaveDecision(ctx context.Context, sessionID int, content string) error {
-	_, err := s.exec(
+	_, err := s.db.ExecContext(
 		ctx,
-		"INSERT INTO decisions (session_id, content) VALUES ($1, $2)",
+		"INSERT INTO decisions (session_id, content) VALUES (?, ?)",
 		sessionID, content,
 	)
 	if err != nil {
@@ -249,9 +222,9 @@ func (s *SessionStore) SaveDecision(ctx context.Context, sessionID int, content 
 }
 
 func (s *SessionStore) GetDecisions(ctx context.Context, sessionID int) ([]Decision, error) {
-	rows, err := s.query(
+	rows, err := s.db.QueryContext(
 		ctx,
-		"SELECT id, session_id, content, created_at FROM decisions WHERE session_id = $1 ORDER BY created_at ASC",
+		"SELECT id, session_id, content, created_at FROM decisions WHERE session_id = ? ORDER BY created_at ASC",
 		sessionID,
 	)
 	if err != nil {

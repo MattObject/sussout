@@ -562,13 +562,7 @@ case tea.KeyMsg:
 
 			if input == "/db" {
 				t.textarea.Reset()
-				driver := t.store.Driver()
-				if driver == "sqlite" {
-					t.statusSuccess = "Database: SQLite (~/.sussout/sussout.db)"
-				} else {
-					cfg := config.Load("")
-					t.statusSuccess = fmt.Sprintf("Database: PostgreSQL (%s)", cfg.DatabaseURL)
-				}
+				t.statusSuccess = "Database: SQLite (~/.sussout/sussout.db)"
 				return t, nil
 			}
 
@@ -982,13 +976,7 @@ func (t *TUI) doHelpCommand(idx int) tea.Cmd {
 		t.statusSuccess = "All progress is saved automatically."
 		return nil
 	case "/db":
-		driver := t.store.Driver()
-		if driver == "sqlite" {
-			t.statusSuccess = "Database: SQLite (~/.sussout/sussout.db)"
-		} else {
-			cfg := config.Load("")
-			t.statusSuccess = fmt.Sprintf("Database: PostgreSQL (%s)", cfg.DatabaseURL)
-		}
+		t.statusSuccess = "Database: SQLite (~/.sussout/sussout.db)"
 		return nil
 	case "/about":
 		t.showAbout = true

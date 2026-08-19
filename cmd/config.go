@@ -16,7 +16,6 @@ func init() {
 	configCmd.AddCommand(configAddCmd)
 	configCmd.AddCommand(configRemoveCmd)
 	configCmd.AddCommand(configListCmd)
-	configCmd.AddCommand(configDBCmd)
 }
 
 var configCmd = &cobra.Command{
@@ -34,8 +33,6 @@ var configCmd = &cobra.Command{
 		fmt.Printf("\nConfig file: %s\n\n", config.ConfigPath())
 
 		fmt.Println("Active settings:")
-		dbSource := sourceLabel()
-		fmt.Printf("  %-18s %s  (%s)\n", "DATABASE_URL:", cfg.DatabaseURL, dbSource)
 		fmt.Printf("  %-18s %s\n", "LLM Base URL:", cfg.LLM.BaseURL)
 		modelDisplay := cfg.LLM.Model
 		if modelDisplay == "" {
@@ -62,7 +59,7 @@ var configCmd = &cobra.Command{
 		}
 		fmt.Println("\n  * = default")
 
-		fmt.Printf("\nCommands: config use | config add | config remove | config list | config db\n\n")
+		fmt.Printf("\nCommands: config use | config add | config remove | config list\n\n")
 		return nil
 	},
 }
@@ -212,35 +209,4 @@ func maskKey(key string) string {
 		return "****"
 	}
 	return key[:4] + "..." + key[len(key)-4:]
-}
-
-var configDBCmd = &cobra.Command{
-	Use:   "db [url]",
-	Short: "View or set the database URL in ~/.sussout.yaml",
-	Args:  cobra.MaximumNArgs(1),
-	RunE: func(cmd *cobra.Command, args []string) error {
-		f, err := config.LoadFile()
-		if err != nil {
-			return err
-		}
-		if len(args) == 0 {
-			cfg := config.Load("")
-			fmt.Printf("Database URL: %s\n", cfg.DatabaseURL)
-			fmt.Printf("Source:       %s\n", sourceLabel())
-			return nil
-		}
-		f.DatabaseURL = args[0]
-		if err := config.SaveFile(f); err != nil {
-			return err
-		}
-		fmt.Printf("Database URL set in %s\n", config.ConfigPath())
-		return nil
-	},
-}
-
-func sourceLabel() string {
-	if os.Getenv("DATABASE_URL") != "" {
-		return "environment"
-	}
-	return "config file"
 }

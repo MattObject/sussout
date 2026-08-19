@@ -10,13 +10,12 @@ Sessions are stored locally in SQLite (`~/.sussout/sussout.db`). You can resume 
 
 ## Features
 
-- **Zero-config** — embedded SQLite, no Docker or database server needed
-- **PostgreSQL optional** — set `DATABASE_URL` to a PostgreSQL connection string to use it instead
+- **Standalone** — embedded SQLite (`~/.sussout/sussout.db`), no Docker or external database
 - **Any OpenAI-compatible server** — LM Studio, Ollama, omlx, vLLM, and remote APIs all work
 - **Interactive TUI** — terminal-native interface with scrolling, color, and panels
 - **Session management** — resume past sessions with auto-generated recaps
 - **Model switching** — change servers and models mid-session from a picker panel
-- **Persistent config** — server, model, and database URL saved to `~/.sussout.yaml` across launches
+- **Persistent config** — server and model saved to `~/.sussout.yaml` across launches
 - **Export** — generate Markdown summaries with `/write`
 
 ## Prerequisites
@@ -43,18 +42,6 @@ sussout config add my-server
 # Start a session
 sussout start
 ```
-
-### Using PostgreSQL instead
-
-```bash
-# Set a PostgreSQL connection string (replaces SQLite)
-sussout config db "postgresql://user:pass@localhost:5432/sussout?sslmode=disable"
-
-# Or via environment variable
-export DATABASE_URL="postgresql://user:pass@localhost:5432/sussout?sslmode=disable"
-```
-
-The fallback order is: `DATABASE_URL` env var → `.env` file → `~/.sussout.yaml` → embedded SQLite.
 
 ## Commands
 
@@ -85,8 +72,6 @@ sussout config list         # List all presets with details
 sussout config add <name> [url]  # Add a preset, optionally with URL
 sussout config use <name>   # Switch default preset
 sussout config remove <name># Remove a preset
-sussout config db <url>    # Set the database URL
-sussout config db           # Show current database URL and source
 ```
 
 Environment variables (`LLM_STUDIO_URL`, `LLM_MODEL`, `LLM_API_KEY`) override preset values at runtime.

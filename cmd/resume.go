@@ -47,13 +47,13 @@ var resumeCmd = &cobra.Command{
 			cancel()
 		}()
 
-		conn, driver, err := db.Open(ctx, cfg.DatabaseURL)
+		conn, err := db.Open(ctx)
 		if err != nil {
 			return fmt.Errorf("database connection: %w", err)
 		}
 		defer conn.Close()
 
-		store := db.NewSessionStore(conn, driver)
+		store := db.NewSessionStore(conn)
 		llmClient := llm.NewLMStudioClient(cfg.LLM)
 
 		brain := llm.NewSocraticBrain(llmClient)
